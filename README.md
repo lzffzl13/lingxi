@@ -1,220 +1,206 @@
-# LingXi Service - 智能客服 Agent
+# LingXi Service
 
-基于 ReAct 循环的智能客服系统，支持多轮对话、工具调用、RAG 检索增强和会话记忆。
+LingXi Service 是一个基于 FastAPI 的智能客服 Agent 服务。项目围绕多轮对话、ReAct 工具调用、知识库检索、会话记忆、Prompt 管理、监控指标和基础安全防护构建，适合作为客服自动化、FAQ 检索增强、工单辅助处理等场景的后端服务。
 
-## 功能特性
+## 核心能力
 
-- 🤖 多轮对话管理 (ReAct 引擎)
-- 🛠️ 工具调用（订单查询、退换货、转人工等）
-- 📚 RAG 检索增强生成
-- 🎯 Prompt 工程化 (版本管理、A/B 测试)
-- 📊 Prometheus 监控指标
-- ⚡ 响应缓存优化
-- 🔒 XSS 安全防护
+- 多轮对话：基于会话 ID 保存上下文，支持历史消息窗口和槽位信息管理。
+- ReAct Agent：LLM 可以按需调用订单查询、退换货检查、创建退货、FAQ 搜索、转人工等工具。
+- 知识库增强：支持 FAQ 管理、关键词检索和 RAG 检索增强。
+- Prompt 工程：支持 Prompt 版本管理、激活版本切换、回滚和 A/B 测试。
+- 流式响应：提供普通聊天接口和 SSE 流式聊天接口。
+- 可观测性：内置健康检查、性能统计、缓存统计和 Prometheus 指标。
+- 基础安全：包含 XSS 输入清理、请求大小限制、限流和生产环境 API Key 认证。
 
-## 架构设计
+## 技术栈
 
-详细架构图请查看 [docs/architecture.md](docs/architecture.md)
+- Python 3.11+
+- FastAPI / Uvicorn
+- Redis
+- MySQL / SQLAlchemy / Alembic
+- OpenAI-compatible LLM API
+- pytest / pytest-asyncio / pytest-cov
+- Docker Compose
 
-```mermaid
-graph TB
-    subgraph "客户端"
-        Web[Web 前端]
-    end
+## 快速启动
 
-    subgraph "应用层"
-        ChatAPI[聊天 API]
-        StreamAPI[流式 API]
-        AdminAPI[管理 API]
-    end
-
-    subgraph "Agent 层"
-        ReAct[ReAct 引擎]
-        RAG[RAG Pipeline]
-    end
-
-    subgraph "工具层"
-        Tools[5 个工具]
-    end
-
-    subgraph "存储"
-        Redis[(Redis)]
-        MySQL[(MySQL)]
-    end
-
-    Web --> ChatAPI
-    ChatAPI --> ReAct
-    ReAct --> RAG
-    ReAct --> Tools
-    ReAct --> Redis
-    Tools --> MySQL
-```
-
-## 快速开始
-
-### 1. 安装依赖
+### 1. 创建环境并安装依赖
 
 ```bash
-pip install -r requirements.txt
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements-dev.txt
 ```
 
-### 2. 配置环境变量
-
-复制 `.env.example` 为 `.env`，填入你的配置：
+如果你使用 `uv`：
 
 ```bash
-cp .env.example .env
+uv venv .venv
+.venv\Scripts\activate
+uv pip install -r requirements-dev.txt
 ```
 
-### 3. 启动 Redis
+### 2. 准备配置
+
+复制环境变量模板：
 
 ```bash
-docker run -p 6379:6379 redis:7-alpine
+copy .env.example .env
 ```
 
-### 4. 启动服务
+至少需要确认这些配置：
+
+```env
+APP_ENV=development
+PORT=8002
+LLM_API_KEY=your-api-key-here
+LLM_BASE_URL=https://api.deepseek.com/v1
+LLM_MODEL=deepseek-chat
+REDIS_URL=redis://localhost:6379/0
+DATABASE_URL=mysql+pymysql://lingxi:lingxi_password@localhost:3306/lingxi
+```
+
+`.env` 只用于本地环境，不要提交到仓库。
+
+### 3. 启动依赖服务
+
+只启动 Redis：
+
+```bash
+docker run --rm -p 6379:6379 redis:7-alpine
+```
+
+或者使用 Docker Compose 启动 Redis、MySQL 和应用：
+
+```bash
+docker compose up -d
+```
+
+### 4. 启动应用
 
 ```bash
 uvicorn app.main:app --reload --port 8002
 ```
 
-> **端口说明**：本项目使用 **8002** 端口，避免与其他项目冲突。
+启动后可以访问：
 
-### 5. 测试
+- 聊天页面：http://localhost:8002/
+- 管理页面：http://localhost:8002/admin
+- API 文档：http://localhost:8002/docs
+- 健康检查：http://localhost:8002/health
+
+生产环境下 `docs` 和 `redoc` 会关闭。
+
+## API 示例
+
+普通聊天：
 
 ```bash
 curl -X POST http://localhost:8002/chat \
   -H "Content-Type: application/json" \
-  -d '{"session_id": "test-001", "message": "你好"}'
+  -d "{\"session_id\":\"demo-session\",\"message\":\"你好，我想查询订单\"}"
 ```
 
-## API 文档
+流式聊天：
 
-启动服务后访问：http://localhost:8002/docs
+```bash
+curl -N -X POST http://localhost:8002/chat/stream \
+  -H "Content-Type: application/json" \
+  -d "{\"session_id\":\"demo-session\",\"message\":\"帮我看看退货流程\"}"
+```
 
-## API 端点
+知识库搜索：
 
-| 方法 | 路径 | 说明 | 认证 |
-|------|------|------|------|
-| GET | `/` | 聊天界面 | 否 |
-| GET | `/admin` | 管理后台 | 否 |
-| POST | `/chat` | 对话 | 否 |
-| POST | `/chat/stream` | 对话 (SSE 流式) | 否 |
-| GET | `/health` | 健康检查 | 否 |
-| GET | `/metrics` | Prometheus 指标 | 否 |
-| GET | `/cache/stats` | 缓存统计 | 否 |
-| POST | `/cache/clear` | 清除缓存 | 否 |
-| GET | `/performance/stats` | 性能统计 | 否 |
-| GET | `/performance/summary` | 性能摘要 | 否 |
-| GET | `/sessions` | 列出会话 | 是 |
-| GET | `/sessions/{id}` | 会话详情 | 是 |
-| DELETE | `/sessions/{id}` | 删除会话 | 是 |
-| GET | `/sessions/{id}/slots` | 会话槽位 | 是 |
-| GET | `/knowledge/faq` | 列出 FAQ | 是 |
-| POST | `/knowledge/faq` | 添加 FAQ | 是 |
-| PUT | `/knowledge/faq/{id}` | 更新 FAQ | 是 |
-| DELETE | `/knowledge/faq/{id}` | 删除 FAQ | 是 |
-| POST | `/knowledge/search` | 搜索 FAQ | 否 |
-| POST | `/prompt/versions` | 创建 Prompt 版本 | 是 |
-| GET | `/prompt/versions/{name}` | 获取 Prompt 版本 | 是 |
-| POST | `/prompt/tests` | 创建 A/B 测试 | 是 |
-| GET | `/prompt/tests/{id}` | 获取测试结果 | 是 |
-| GET | `/analytics/stats` | 数据统计 | 是 |
-| GET | `/analytics/conversations/{id}` | 对话详情 | 是 |
-| GET | `/analytics/users/{id}/conversations` | 用户对话列表 | 是 |
+```bash
+curl -X POST http://localhost:8002/knowledge/search \
+  -H "Content-Type: application/json" \
+  -d "{\"query\":\"退货需要多久\",\"top_k\":3}"
+```
+
+## 主要接口
+
+| 模块 | 接口 |
+| --- | --- |
+| 页面 | `GET /`、`GET /admin` |
+| 聊天 | `POST /chat`、`POST /chat/stream` |
+| 健康与缓存 | `GET /health`、`GET /cache/stats`、`POST /cache/clear` |
+| 监控 | `GET /metrics` |
+| 性能 | `GET /performance/stats`、`GET /performance/summary` |
+| 会话 | `GET /sessions`、`GET /sessions/{session_id}`、`DELETE /sessions/{session_id}`、`GET /sessions/{session_id}/slots` |
+| 知识库 | `GET /knowledge/faq`、`GET /knowledge/faq/{faq_id}`、`POST /knowledge/faq`、`PUT /knowledge/faq/{faq_id}`、`DELETE /knowledge/faq/{faq_id}`、`POST /knowledge/search` |
+| Prompt | `POST /prompt/versions`、`GET /prompt/versions/{name}`、`GET /prompt/active/{name}`、`POST /prompt/active/{name}/{version_id}`、`POST /prompt/rollback/{name}` |
+| A/B 测试 | `POST /prompt/tests`、`GET /prompt/tests`、`GET /prompt/tests/{test_id}`、`POST /prompt/tests/{test_id}/pause`、`POST /prompt/tests/{test_id}/resume` |
+| 分析 | `GET /analytics/stats`、`GET /analytics/conversations/{conversation_id}`、`GET /analytics/users/{user_id}/conversations` |
+
+## 测试
+
+运行全部测试：
+
+```bash
+pytest tests -q
+```
+
+查看覆盖率：
+
+```bash
+pytest --cov=app --cov-report=term-missing tests
+```
+
+最近一次本地验证结果：
+
+- 测试：151 passed
+- 覆盖率：75%
 
 ## 项目结构
 
-```
+```text
 app/
-├── main.py           # FastAPI 入口
-├── config.py         # 配置管理
-├── models/           # 数据模型
-├── session/          # 会话管理
-├── agent/            # ReAct 引擎
-├── tools/            # 工具系统
-├── api/              # API 端点
-├── cache/            # 响应缓存
-├── monitoring/       # 监控指标
-├── security/         # 安全防护
-├── db/               # 数据库
-├── knowledge/        # 知识库
-├── rag/              # RAG 检索增强
-├── prompt/           # Prompt 工程化
-└── utils/            # 工具函数
+  main.py              FastAPI 应用入口
+  config.py            配置加载
+  api/                 HTTP 接口
+  agent/               LLM 客户端和 ReAct Agent
+  tools/               Agent 可调用工具
+  session/             会话管理和 Redis 客户端
+  knowledge/           FAQ 与 RAG 知识库管理
+  rag/                 文档切分、向量检索和 RAG Pipeline
+  prompt/              Prompt 版本管理和 A/B 测试
+  cache/               响应缓存
+  monitoring/          Prometheus 指标
+  security/            输入清理和 XSS 防护
+  db/                  数据库模型、连接和仓储
+  models/              请求与响应模型
+  utils/               日志和通用工具
 
-docs/
-└── architecture.md   # 架构设计文档
-```
-
-## 监控
-
-### Prometheus 指标
-
-访问 `/metrics` 端点获取 Prometheus 格式的指标：
-
-```bash
-curl http://localhost:8002/metrics
-```
-
-指标包括：
-- `lingxi_http_requests_total` - HTTP 请求总数
-- `lingxi_http_request_duration_seconds` - 请求延迟
-- `lingxi_llm_requests_total` - LLM 调用次数
-- `lingxi_llm_tokens_total` - Token 使用量
-- `lingxi_tool_calls_total` - 工具调用次数
-- `lingxi_cache_hits_total` - 缓存命中次数
-- `lingxi_rag_searches_total` - RAG 搜索次数
-
-### 性能统计
-
-```bash
-# 查看性能统计
-curl http://localhost:8002/performance/stats
-
-# 查看性能摘要
-curl http://localhost:8002/performance/summary
-```
-
-### 缓存统计
-
-```bash
-# 查看缓存统计
-curl http://localhost:8002/cache/stats
-
-# 清除缓存
-curl -X POST http://localhost:8002/cache/clear
-```
-
-### Prompt 管理
-
-```bash
-# 创建 Prompt 版本
-curl -X POST http://localhost:8002/prompt/versions \
-  -H "Content-Type: application/json" \
-  -d '{"name": "system_prompt", "template": "你是一个智能客服..."}'
-
-# 创建 A/B 测试
-curl -X POST http://localhost:8002/prompt/tests \
-  -H "Content-Type: application/json" \
-  -d '{"name": "v1 vs v2", "variants": [{"name": "v1", "prompt_version_id": "..."}, {"name": "v2", "prompt_version_id": "..."}]}'
-```
-
-## 开发
-
-```bash
-# 安装开发依赖
-pip install -r requirements-dev.txt
-
-# 运行测试
-pytest tests/ -v
-
-# 运行测试并查看覆盖率
-pytest --cov=app tests/
+tests/                 单元测试和接口测试
+docs/                  设计文档
+static/                聊天页和管理页静态资源
+scripts/               初始化脚本
+alembic/               数据库迁移
 ```
 
 ## Docker 部署
 
 ```bash
-docker-compose up -d
+docker compose up -d --build
 ```
+
+Compose 会启动：
+
+- Redis：`localhost:6379`
+- MySQL：`localhost:3306`
+- LingXi Service：`localhost:8002`
+
+注意：Compose 中应用容器使用 `APP_ENV=production`，因此需要在 `.env` 中配置可用的 `API_KEY` 和 LLM 参数。
+
+## 生产环境注意事项
+
+- 修改默认 `API_KEY`，不要使用模板值。
+- 不要把真实 `.env`、密钥、数据库密码提交到仓库。
+- 设置明确的 `CORS_ORIGINS`，避免生产环境继续使用 `["*"]`。
+- 确认 `APP_ENV=production`，否则 API Key 中间件不会启用。
+- 为 Redis、MySQL 和 LLM API 配置稳定的网络、超时和重试策略。
+- 对外暴露服务时建议放在反向代理后，并统一处理 TLS、访问日志和限流策略。
+
+## 文档
+
+更多架构设计可以查看 [docs/architecture.md](docs/architecture.md)。
