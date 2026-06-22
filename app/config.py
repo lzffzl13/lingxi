@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     APP_NAME: str = "lingxi-service"
     APP_ENV: str = "development"
     LOG_LEVEL: str = "INFO"
+    VERSION: str = "1.2.0"
+    PORT: int = 8002
 
     # LLM
     LLM_API_KEY: SecretStr = SecretStr("not-set")
@@ -29,6 +31,36 @@ class Settings(BaseSettings):
     # Session
     SESSION_TTL: int = 3600
     MAX_HISTORY_LENGTH: int = 20
+
+    # Knowledge Base
+    CHROMA_PERSIST_DIR: str = "./data/chroma"
+    EMBEDDING_MODEL: str = "text-embedding-ada-002"
+    KNOWLEDGE_TOP_K: int = 3
+
+    # Database (MySQL)
+    DATABASE_URL: str = ""
+
+    # Security
+    API_KEY: str = "lingxi-api-key-change-me"
+    CORS_ORIGINS: list[str] = ["*"]
+    RATE_LIMIT: str = "100/minute"
+
+    # Agent
+    MAX_ITERATIONS: int = 5
+    HISTORY_WINDOW: int = 10
+
+    # LLM Retry
+    LLM_MAX_RETRIES: int = 3
+    LLM_RETRY_DELAY: float = 1.0
+    LLM_REQUEST_TIMEOUT: float = 60.0
+
+    # Cache
+    CACHE_MAX_SIZE: int = 1000
+    CACHE_TTL_SECONDS: int = 3600
+
+    # Security
+    MAX_MESSAGE_LENGTH: int = 10000
+    MAX_REQUEST_SIZE: int = 1048576  # 1MB
 
 
 settings = Settings()

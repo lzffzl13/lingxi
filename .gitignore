@@ -29,8 +29,9 @@ htmlcov/
 .coverage.*
 coverage.xml
 
-# Chroma
+# Chroma / Data
 chroma_data/
+data/
 
 # OS
 .DS_Store

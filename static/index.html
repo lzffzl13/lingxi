@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>灵犀智能客服</title>
+    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #0ea5e9;
+            --primary-dark: #0284c7;
+            --bg: #f0f9ff;
+            --card: #ffffff;
+            --text: #0c4a6e;
+            --text-light: #64748b;
+            --border: #bae6fd;
+            --user-bg: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            --bot-bg: #e0f2fe;
+            --success: #10b981;
+            --warning: #f59e0b;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: var(--bg);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .app {
+            width: 100%;
+            max-width: 480px;
+            height: 700px;
+            background: var(--card);
+            border-radius: 24px;
+            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.12);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            border: 1px solid var(--border);
+        }
+
+        /* Header */
+        .header {
+            background: var(--user-bg);
+            padding: 24px;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 200px;
+            height: 200px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%;
+        }
+
+        .header-top {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+            z-index: 1;
+        }
+
+        .header-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .avatar {
+            width: 48px;
+            height: 48px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            backdrop-filter: blur(10px);
+        }
+
+        .header-text h1 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .header-text p {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+
+        .status-dot {
+            width: 10px;
+            height: 10px;
+            background: var(--success);
+            border-radius: 50%;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+        }
+
+        /* Quick Actions */
+        .quick-actions {
+            padding: 16px 20px;
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            border-bottom: 1px solid var(--border);
+            background: white;
+        }
+
+        .quick-btn {
+            flex-shrink: 0;
+            padding: 8px 16px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            font-size: 13px;
+            color: var(--text);
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .quick-btn:hover {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+            transform: translateY(-2px);
+        }
+
+        .quick-btn i {
+            font-size: 16px;
+        }
+
+        /* Messages */
+        .messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            background: linear-gradient(to bottom, #f8fafc 0%, #f1f5f9 100%);
+        }
+
+        .message {
+            display: flex;
+            gap: 10px;
+            animation: slideIn 0.3s ease;
+            max-width: 85%;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .msg-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 18px;
+        }
+
+        .message.bot .msg-avatar {
+            background: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
+            color: white;
+        }
+
+        .message.user .msg-avatar {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+        }
+
+        .msg-content {
+            padding: 14px 18px;
+            border-radius: 18px;
+            font-size: 14px;
+            line-height: 1.6;
+            word-break: break-word;
+        }
+
+        .message.bot .msg-content {
+            background: white;
+            color: var(--text);
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+        }
+
+        .message.user .msg-content {
+            background: var(--user-bg);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .msg-content strong {
+            color: #0369a1;
+        }
+
+        .message.user .msg-content strong {
+            color: white;
+        }
+
+        .tool-info {
+            margin-top: 10px;
+            padding: 8px 12px;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            border-radius: 10px;
+            font-size: 12px;
+            color: #0369a1;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tool-info i {
+            font-size: 16px;
+        }
+
+        /* Typing Indicator */
+        .typing {
+            display: flex;
+            gap: 4px;
+            padding: 14px 18px;
+            background: white;
+            border-radius: 18px;
+            border-bottom-left-radius: 4px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            width: fit-content;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: #94a3b8;
+            border-radius: 50%;
+            animation: bounce 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes bounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-8px); }
+        }
+
+        /* Input */
+        .input-area {
+            padding: 16px 20px;
+            background: white;
+            border-top: 1px solid var(--border);
+        }
+
+        .input-wrapper {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .input-field {
+            flex: 1;
+            position: relative;
+        }
+
+        .input-field input {
+            width: 100%;
+            padding: 14px 18px;
+            border: 2px solid var(--border);
+            border-radius: 16px;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.3s;
+            background: var(--bg);
+        }
+
+        .input-field input:focus {
+            border-color: var(--primary);
+            background: white;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+        }
+
+        .send-btn {
+            width: 48px;
+            height: 48px;
+            background: var(--user-bg);
+            border: none;
+            border-radius: 16px;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            transition: all 0.2s;
+        }
+
+        .send-btn:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.4);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Scrollbar */
+        .messages::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .messages::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .messages::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        .messages::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* Welcome */
+        .welcome {
+            text-align: center;
+            padding: 30px 20px;
+        }
+
+        .welcome-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .welcome h2 {
+            font-size: 18px;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+
+        .welcome p {
+            font-size: 14px;
+            color: var(--text-light);
+            line-height: 1.6;
+        }
+
+        .features {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-top: 20px;
+        }
+
+        .feature {
+            text-align: center;
+        }
+
+        .feature-icon {
+            width: 44px;
+            height: 44px;
+            background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 8px;
+            font-size: 20px;
+            color: #0284c7;
+        }
+
+        .feature span {
+            font-size: 12px;
+            color: var(--text-light);
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <div class="header">
+            <div class="header-top">
+                <div class="header-info">
+                    <div class="avatar">
+                        <i class="ri-robot-2-line"></i>
+                    </div>
+                    <div class="header-text">
+                        <h1>灵犀智能客服</h1>
+                        <p>AI 驱动 · 7x24 小时在线</p>
+                    </div>
+                </div>
+                <div class="status-dot"></div>
+            </div>
+        </div>
+
+        <div class="quick-actions">
+            <button class="quick-btn" onclick="quickMsg('帮我查一下订单 ORD-20240101-001')">
+                <i class="ri-search-line"></i> 查订单
+            </button>
+            <button class="quick-btn" onclick="quickMsg('我想退货，订单号 ORD-20240103-003')">
+                <i class="ri-exchange-line"></i> 退换货
+            </button>
+            <button class="quick-btn" onclick="quickMsg('退款多久到账？')">
+                <i class="ri-question-line"></i> 常见问题
+            </button>
+            <button class="quick-btn" onclick="quickMsg('转人工客服')">
+                <i class="ri-customer-service-2-line"></i> 转人工
+            </button>
+        </div>
+
+        <div class="messages" id="messages">
+            <div class="welcome">
+                <div class="welcome-icon">
+                    <i class="ri-sparkling-2-fill" style="color: var(--primary)"></i>
+                </div>
+                <h2>您好，我是灵犀</h2>
+                <p>智能客服助手，很高兴为您服务<br>请问有什么可以帮您的？</p>
+                <div class="features">
+                    <div class="feature">
+                        <div class="feature-icon"><i class="ri-search-line"></i></div>
+                        <span>订单查询</span>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon"><i class="ri-exchange-line"></i></div>
+                        <span>退换货</span>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon"><i class="ri-book-open-line"></i></div>
+                        <span>FAQ</span>
+                    </div>
+                    <div class="feature">
+                        <div class="feature-icon"><i class="ri-customer-service-2-line"></i></div>
+                        <span>人工客服</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="input-area">
+            <div class="input-wrapper">
+                <div class="input-field">
+                    <input type="text" id="input" placeholder="输入您的问题..." onkeydown="if(event.key==='Enter')send()">
+                </div>
+                <button class="send-btn" id="sendBtn" onclick="send()">
+                    <i class="ri-send-plane-2-fill"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API = 'http://localhost:8000';
+        const session = 'web-' + Date.now();
+        const msgs = document.getElementById('messages');
+        const input = document.getElementById('input');
+        const sendBtn = document.getElementById('sendBtn');
+        let firstMsg = true;
+        let currentBotMsg = null;
+        let currentContent = null;
+
+        const toolNames = {
+            check_order: '订单查询',
+            check_return: '退换货检查',
+            create_return: '创建退换货',
+            search_faq: 'FAQ搜索',
+            transfer_to_human: '转人工'
+        };
+
+        function addMsg(role, text, tools = []) {
+            if (firstMsg) {
+                msgs.innerHTML = '';
+                firstMsg = false;
+            }
+
+            const div = document.createElement('div');
+            div.className = `message ${role}`;
+
+            const avatar = document.createElement('div');
+            avatar.className = 'msg-avatar';
+            avatar.innerHTML = role === 'bot' ? '<i class="ri-robot-2-line"></i>' : '<i class="ri-user-3-line"></i>';
+
+            const content = document.createElement('div');
+            content.className = 'msg-content';
+            content.innerHTML = formatText(text);
+
+            if (tools.length > 0) {
+                addToolInfo(content, tools);
+            }
+
+            div.appendChild(avatar);
+            div.appendChild(content);
+            msgs.appendChild(div);
+            msgs.scrollTop = msgs.scrollHeight;
+            return { div, content };
+        }
+
+        function formatText(text) {
+            return text
+                .replace(/\n/g, '<br>')
+                .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                .replace(/`(.*?)`/g, '<code>$1</code>');
+        }
+
+        function addToolInfo(contentEl, tools) {
+            const toolDiv = document.createElement('div');
+            toolDiv.className = 'tool-info';
+            toolDiv.innerHTML = `<i class="ri-tools-line"></i> ${tools.map(t => toolNames[t] || t).join(' + ')}`;
+            contentEl.appendChild(toolDiv);
+        }
+
+        function createStreamingMsg() {
+            if (firstMsg) {
+                msgs.innerHTML = '';
+                firstMsg = false;
+            }
+
+            const div = document.createElement('div');
+            div.className = 'message bot';
+            div.id = 'streaming-msg';
+
+            const avatar = document.createElement('div');
+            avatar.className = 'msg-avatar';
+            avatar.innerHTML = '<i class="ri-robot-2-line"></i>';
+
+            const content = document.createElement('div');
+            content.className = 'msg-content';
+            content.innerHTML = '<span class="cursor">▊</span>';
+
+            div.appendChild(avatar);
+            div.appendChild(content);
+            msgs.appendChild(div);
+
+            currentBotMsg = div;
+            currentContent = content;
+            return content;
+        }
+
+        function appendToStream(text) {
+            if (!currentContent) return;
+            // Remove cursor, add text, re-add cursor
+            const cursor = currentContent.querySelector('.cursor');
+            if (cursor) cursor.remove();
+            currentContent.innerHTML += formatText(text);
+            currentContent.innerHTML += '<span class="cursor">▊</span>';
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+
+        function finalizeStream(tools = []) {
+            if (!currentContent) return;
+            const cursor = currentContent.querySelector('.cursor');
+            if (cursor) cursor.remove();
+            if (tools.length > 0) {
+                addToolInfo(currentContent, tools);
+            }
+            currentBotMsg = null;
+            currentContent = null;
+        }
+
+        function showTyping() {
+            const div = document.createElement('div');
+            div.className = 'message bot';
+            div.id = 'typing';
+            div.innerHTML = `
+                <div class="msg-avatar"><i class="ri-robot-2-line"></i></div>
+                <div class="typing">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            `;
+            msgs.appendChild(div);
+            msgs.scrollTop = msgs.scrollHeight;
+        }
+
+        function hideTyping() {
+            document.getElementById('typing')?.remove();
+        }
+
+        async function send() {
+            const text = input.value.trim();
+            if (!text) return;
+
+            addMsg('user', text);
+            input.value = '';
+            sendBtn.disabled = true;
+
+            try {
+                // Use streaming endpoint
+                const res = await fetch(`${API}/chat/stream`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_id: session, message: text })
+                });
+
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let toolCalls = [];
+                let streamStarted = false;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const lines = buffer.split('\n');
+                    buffer = lines.pop() || '';
+
+                    for (const line of lines) {
+                        if (line.startsWith('event: ')) {
+                            const eventType = line.slice(7).trim();
+                            continue;
+                        }
+                        if (line.startsWith('data: ')) {
+                            const dataStr = line.slice(6).trim();
+                            if (!dataStr) continue;
+
+                            try {
+                                const data = JSON.parse(dataStr);
+
+                                if (!streamStarted) {
+                                    hideTyping();
+                                    createStreamingMsg();
+                                    streamStarted = true;
+                                }
+
+                                // Handle different event types based on data content
+                                if (data.content !== undefined) {
+                                    // Token event
+                                    appendToStream(data.content);
+                                } else if (data.name !== undefined) {
+                                    // Tool event
+                                    toolCalls.push(data.name);
+                                } else if (data.status !== undefined) {
+                                    // Done event
+                                    finalizeStream(data.tool_calls || toolCalls);
+                                }
+                            } catch (e) {
+                                console.error('Parse error:', e, dataStr);
+                            }
+                        }
+                    }
+                }
+
+                // Final cleanup if stream ended without done event
+                if (streamStarted) {
+                    finalizeStream(toolCalls);
+                }
+
+            } catch (e) {
+                console.error('Stream error:', e);
+                hideTyping();
+                if (!currentBotMsg) {
+                    addMsg('bot', '抱歉，连接出现问题，请稍后再试。');
+                }
+            }
+
+            sendBtn.disabled = false;
+            input.focus();
+        }
+
+        function quickMsg(text) {
+            input.value = text;
+            send();
+        }
+
+        input.focus();
+    </script>
+
+    <style>
+        .cursor {
+            animation: blink 1s infinite;
+            color: #0ea5e9;
+        }
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+        code {
+            background: #e0f2fe;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #0369a1;
+        }
+    </style>
+</body>
+</html>

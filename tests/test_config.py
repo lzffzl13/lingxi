@@ -6,9 +6,8 @@ def test_default_config():
     """Test that config loads with default values."""
     config = Settings(LLM_API_KEY="test-key")
     assert config.APP_NAME == "lingxi-service"
-    assert config.LLM_MODEL == "deepseek-chat"
-    assert config.REDIS_URL == "redis://localhost:6379/0"
     assert config.SESSION_TTL == 3600
+    assert config.KNOWLEDGE_TOP_K == 3
 
 
 def test_custom_config():

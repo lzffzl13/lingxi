@@ -16,9 +16,8 @@ class ChatResponse(BaseModel):
     tool_calls_made: list[str] = Field(default_factory=list)
 
 
-class HealthResponse(BaseModel):
-    """Response model for health endpoint."""
-    status: str  # "ok" | "degraded"
-    redis: str  # "connected" | "disconnected"
-    llm: str  # "available" | "unavailable"
-    version: str
+class ErrorResponse(BaseModel):
+    """Error response model."""
+    code: str
+    message: str
+    detail: Optional[dict] = None

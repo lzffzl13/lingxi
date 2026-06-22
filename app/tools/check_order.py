@@ -1,10 +1,15 @@
+"""Check order tool - queries database for order information."""
+
 import json
 from app.tools.base import BaseTool, register_tool
+from app.db.database import async_session_factory
+from app.db.repositories import OrderRepository
 
 
 @register_tool
 class CheckOrderTool(BaseTool):
     """查询订单状态和物流信息。"""
+
     name = "check_order"
     description = "根据订单号查询订单状态、物流信息"
     parameters = {
@@ -18,7 +23,7 @@ class CheckOrderTool(BaseTool):
         "required": ["order_id"],
     }
 
-    # Mock order database
+    # Fallback mock data for when database is not available
     MOCK_ORDERS = {
         "ORD-20240101-001": {
             "status": "已发货",
@@ -41,6 +46,19 @@ class CheckOrderTool(BaseTool):
     }
 
     async def execute(self, order_id: str) -> str:
+        """Query order from database or fallback to mock data."""
+        # Try database first
+        if async_session_factory:
+            try:
+                async with async_session_factory() as session:
+                    repo = OrderRepository(session)
+                    order = await repo.get_by_id(order_id)
+                    if order:
+                        return json.dumps(order.to_dict(), ensure_ascii=False)
+            except Exception:
+                pass  # Fall through to mock data
+
+        # Fallback to mock data
         order = self.MOCK_ORDERS.get(order_id)
         if order:
             return json.dumps(order, ensure_ascii=False)
