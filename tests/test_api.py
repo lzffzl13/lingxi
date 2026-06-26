@@ -53,6 +53,29 @@ def override_health_deps(api_app, redis_ok=True, llm_ok=True):
     return mock_redis, mock_agent
 
 
+class _FakeSession:
+    def __init__(self, should_fail=False):
+        self.should_fail = should_fail
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def execute(self, _query):
+        if self.should_fail:
+            raise RuntimeError("db down")
+        return 1
+
+
+def make_session_factory(should_fail=False):
+    def factory():
+        return _FakeSession(should_fail=should_fail)
+
+    return factory
+
+
 def override_agent(api_app, agent):
     """Override chat endpoint agent dependency."""
     from app.api.deps import get_agent
@@ -63,7 +86,11 @@ def override_agent(api_app, agent):
 @pytest.mark.asyncio
 async def test_health_ok(api_app, client):
     """Health endpoint reports ok when Redis and LLM are available."""
+    from app.api import health as health_module
+
     override_health_deps(api_app, redis_ok=True, llm_ok=True)
+    health_module.settings.DATABASE_URL = ""
+    health_module.async_session_factory = None
 
     resp = await client.get("/health")
 
@@ -79,7 +106,11 @@ async def test_health_ok(api_app, client):
 @pytest.mark.asyncio
 async def test_health_degraded(api_app, client):
     """Health endpoint reports degraded when one dependency is unavailable."""
+    from app.api import health as health_module
+
     override_health_deps(api_app, redis_ok=True, llm_ok=False)
+    health_module.settings.DATABASE_URL = ""
+    health_module.async_session_factory = None
 
     resp = await client.get("/health")
 
@@ -93,7 +124,11 @@ async def test_health_degraded(api_app, client):
 @pytest.mark.asyncio
 async def test_health_unhealthy(api_app, client):
     """Health endpoint reports unhealthy when required dependencies fail."""
+    from app.api import health as health_module
+
     override_health_deps(api_app, redis_ok=False, llm_ok=False)
+    health_module.settings.DATABASE_URL = ""
+    health_module.async_session_factory = None
 
     resp = await client.get("/health")
 
@@ -102,6 +137,40 @@ async def test_health_unhealthy(api_app, client):
     assert data["status"] == "unhealthy"
     assert data["redis"] == "disconnected"
     assert data["llm"] == "unavailable"
+
+
+@pytest.mark.asyncio
+async def test_health_degraded_when_database_is_configured_but_unavailable(api_app, client):
+    """Database failures should degrade overall health when DB is configured."""
+    from app.api import health as health_module
+
+    override_health_deps(api_app, redis_ok=True, llm_ok=True)
+    health_module.settings.DATABASE_URL = "mysql+pymysql://user:pass@localhost/db"
+    health_module.async_session_factory = make_session_factory(should_fail=True)
+
+    resp = await client.get("/health")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "degraded"
+    assert data["database"] == "unavailable"
+
+
+@pytest.mark.asyncio
+async def test_health_ok_when_database_is_connected(api_app, client):
+    """Database connectivity should be reflected in both component and overall status."""
+    from app.api import health as health_module
+
+    override_health_deps(api_app, redis_ok=True, llm_ok=True)
+    health_module.settings.DATABASE_URL = "mysql+pymysql://user:pass@localhost/db"
+    health_module.async_session_factory = make_session_factory(should_fail=False)
+
+    resp = await client.get("/health")
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "ok"
+    assert data["database"] == "connected"
 
 
 @pytest.mark.asyncio
