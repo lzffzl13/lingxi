@@ -5,6 +5,7 @@ import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from unittest.mock import AsyncMock, MagicMock
 
+from app.config import DEFAULT_API_KEY
 from app.models.schemas import ChatResponse
 
 
@@ -23,6 +24,12 @@ async def client(api_app):
     transport = ASGITransport(app=api_app)
     async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
+
+
+@pytest.fixture
+def auth_headers():
+    """Default authenticated headers for protected endpoints."""
+    return {"X-API-Key": DEFAULT_API_KEY}
 
 
 def override_health_deps(api_app, redis_ok=True, llm_ok=True):
@@ -98,7 +105,7 @@ async def test_health_unhealthy(api_app, client):
 
 
 @pytest.mark.asyncio
-async def test_chat_success(api_app, client):
+async def test_chat_success(api_app, client, auth_headers):
     """Chat endpoint returns the agent response."""
     mock_agent = AsyncMock()
     mock_agent.run.return_value = ChatResponse(
@@ -111,6 +118,7 @@ async def test_chat_success(api_app, client):
 
     resp = await client.post(
         "/chat",
+        headers=auth_headers,
         json={"session_id": "test-001", "message": "hello"},
     )
 
@@ -128,13 +136,14 @@ async def test_chat_success(api_app, client):
 
 
 @pytest.mark.asyncio
-async def test_chat_rejects_empty_after_sanitize(api_app, client):
+async def test_chat_rejects_empty_after_sanitize(api_app, client, auth_headers):
     """Chat endpoint rejects messages that are empty after sanitization."""
     mock_agent = AsyncMock()
     override_agent(api_app, mock_agent)
 
     resp = await client.post(
         "/chat",
+        headers=auth_headers,
         json={"session_id": "test-001", "message": "   "},
     )
 
@@ -144,13 +153,14 @@ async def test_chat_rejects_empty_after_sanitize(api_app, client):
 
 
 @pytest.mark.asyncio
-async def test_chat_rejects_too_long_message(api_app, client):
+async def test_chat_rejects_too_long_message(api_app, client, auth_headers):
     """Chat endpoint rejects messages beyond the configured limit."""
     mock_agent = AsyncMock()
     override_agent(api_app, mock_agent)
 
     resp = await client.post(
         "/chat",
+        headers=auth_headers,
         json={"session_id": "test-001", "message": "x" * 2001},
     )
 
@@ -159,7 +169,7 @@ async def test_chat_rejects_too_long_message(api_app, client):
 
 
 @pytest.mark.asyncio
-async def test_chat_agent_error_returns_500(api_app, client):
+async def test_chat_agent_error_returns_500(api_app, client, auth_headers):
     """Chat endpoint hides unexpected agent errors behind a 500 response."""
     mock_agent = AsyncMock()
     mock_agent.run.side_effect = RuntimeError("boom")
@@ -167,6 +177,7 @@ async def test_chat_agent_error_returns_500(api_app, client):
 
     resp = await client.post(
         "/chat",
+        headers=auth_headers,
         json={"session_id": "test-001", "message": "hello"},
     )
 
@@ -175,7 +186,7 @@ async def test_chat_agent_error_returns_500(api_app, client):
 
 
 @pytest.mark.asyncio
-async def test_chat_stream(api_app, client):
+async def test_chat_stream(api_app, client, auth_headers):
     """Streaming chat endpoint returns server-sent events from the agent."""
     async def event_source(session_id, user_message):
         assert session_id == "test-001"
@@ -189,6 +200,7 @@ async def test_chat_stream(api_app, client):
 
     resp = await client.post(
         "/chat/stream",
+        headers=auth_headers,
         json={"session_id": "test-001", "message": "hello"},
     )
 
@@ -199,18 +211,32 @@ async def test_chat_stream(api_app, client):
 
 
 @pytest.mark.asyncio
-async def test_cache_stats_and_clear(client):
+async def test_cache_stats_and_clear(client, auth_headers):
     """Cache endpoints expose stats and clear cached responses."""
     from app.cache import init_response_cache
 
     cache = init_response_cache(max_size=2, ttl_seconds=30)
     cache.set([{"role": "user", "content": "hello"}], "cached")
 
-    stats_resp = await client.get("/cache/stats")
+    stats_resp = await client.get("/cache/stats", headers=auth_headers)
     assert stats_resp.status_code == 200
     assert stats_resp.json()["size"] == 1
 
-    clear_resp = await client.post("/cache/clear")
+    clear_resp = await client.post("/cache/clear", headers=auth_headers)
     assert clear_resp.status_code == 200
     assert clear_resp.json()["message"] == "Cache cleared successfully"
     assert cache.size() == 0
+
+
+@pytest.mark.asyncio
+async def test_protected_endpoint_requires_api_key(api_app, client):
+    """Protected endpoints reject requests without an API key."""
+    override_agent(api_app, AsyncMock())
+
+    resp = await client.post(
+        "/chat",
+        json={"session_id": "test-001", "message": "hello"},
+    )
+
+    assert resp.status_code == 401
+    assert resp.json()["code"] == "MISSING_API_KEY"

@@ -1,5 +1,9 @@
-from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import SecretStr
+from pydantic import model_validator
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+DEFAULT_API_KEY = "lingxi-api-key-change-me"
 
 
 class Settings(BaseSettings):
@@ -41,7 +45,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = ""
 
     # Security
-    API_KEY: str = "lingxi-api-key-change-me"
+    API_KEY: str = DEFAULT_API_KEY
+    AUTH_ENABLED: bool = True
     CORS_ORIGINS: list[str] = ["*"]
     RATE_LIMIT: str = "100/minute"
 
@@ -61,6 +66,20 @@ class Settings(BaseSettings):
     # Security
     MAX_MESSAGE_LENGTH: int = 10000
     MAX_REQUEST_SIZE: int = 1048576  # 1MB
+
+    @model_validator(mode="after")
+    def validate_security_settings(self):
+        """Fail fast when auth settings are unsafe."""
+        if self.AUTH_ENABLED and not self.API_KEY.strip():
+            raise ValueError("API_KEY must be set when AUTH_ENABLED is true")
+
+        if self.APP_ENV == "production":
+            if not self.AUTH_ENABLED:
+                raise ValueError("AUTH_ENABLED must be true in production")
+            if self.API_KEY == DEFAULT_API_KEY:
+                raise ValueError("API_KEY must be changed in production")
+
+        return self
 
 
 settings = Settings()

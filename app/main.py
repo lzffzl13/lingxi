@@ -12,19 +12,18 @@ from app.agent.llm import LLMClient
 from app.agent.react import ReActAgent
 from app.api import deps
 from app.api.middleware import APIKeyMiddleware, RateLimitMiddleware, RequestLoggingMiddleware
-from app.monitoring import MetricsMiddleware
-from app.security import XSSProtectionMiddleware
 from app.api.router import api_router
+from app.cache import init_response_cache
 from app.config import settings
 from app.db.database import close_db, init_db
 from app.exceptions import LingXiError
-from app.knowledge.manager import KnowledgeManager
 from app.knowledge.rag_manager import RAGKnowledgeManager
+from app.monitoring import MetricsMiddleware
+from app.security import XSSProtectionMiddleware
 from app.session.manager import SessionManager
 from app.session.redis_client import close_redis, get_redis
 from app.tools.search_faq import set_knowledge_manager
 from app.utils.logger import logger
-from app.cache import init_response_cache
 
 
 @asynccontextmanager
@@ -32,36 +31,28 @@ async def lifespan(app: FastAPI):
     """Application lifecycle management - initialize on startup, cleanup on shutdown."""
     logger.info("Starting LingXi Service...")
 
-    # Initialize database
     await init_db()
 
-    # Initialize Redis
     redis_client = get_redis()
     session_mgr = SessionManager(redis_client, settings)
     llm_client = LLMClient(settings)
 
-    # Initialize knowledge base (RAG + keyword fallback)
     knowledge_mgr = RAGKnowledgeManager(settings)
     await knowledge_mgr.initialize()
     set_knowledge_manager(knowledge_mgr)
 
-    # Initialize response cache
     init_response_cache(
         max_size=settings.CACHE_MAX_SIZE,
         ttl_seconds=settings.CACHE_TTL_SECONDS,
     )
 
-    # Initialize agent
     agent = ReActAgent(llm_client, session_mgr, settings)
-
-    # Register dependencies
     deps.init_deps(redis_client, agent, session_mgr, knowledge_mgr)
 
     logger.info("LingXi Service started successfully")
 
     yield
 
-    # Shutdown
     logger.info("Shutting down LingXi Service...")
     await close_redis(redis_client)
     await close_db()
@@ -77,7 +68,6 @@ app = FastAPI(
     redoc_url="/redoc" if settings.APP_ENV != "production" else None,
 )
 
-# CORS middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -86,28 +76,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API Key middleware (only in production)
-if settings.APP_ENV == "production":
+if settings.AUTH_ENABLED:
     app.add_middleware(APIKeyMiddleware)
 
-# Rate limiting middleware
 _rate_limit = int(settings.RATE_LIMIT.split("/")[0]) if settings.RATE_LIMIT else 60
 app.add_middleware(RateLimitMiddleware, requests_per_minute=_rate_limit)
-
-# Request logging middleware
 app.add_middleware(RequestLoggingMiddleware)
-
-# Prometheus metrics middleware
 app.add_middleware(MetricsMiddleware)
-
-# XSS protection middleware
 app.add_middleware(XSSProtectionMiddleware)
 
-# Mount static files
 static_dir = Path(__file__).parent.parent / "static"
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
-
-# Include API router
 app.include_router(api_router)
 
 
