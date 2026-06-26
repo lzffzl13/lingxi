@@ -240,3 +240,17 @@ async def test_protected_endpoint_requires_api_key(api_app, client):
 
     assert resp.status_code == 401
     assert resp.json()["code"] == "MISSING_API_KEY"
+
+
+@pytest.mark.asyncio
+async def test_query_param_api_key_is_not_accepted(api_app, client):
+    """Protected endpoints must reject API keys passed in the query string."""
+    override_agent(api_app, AsyncMock())
+
+    resp = await client.post(
+        "/chat?api_key=lingxi-api-key-change-me",
+        json={"session_id": "test-001", "message": "hello"},
+    )
+
+    assert resp.status_code == 401
+    assert resp.json()["code"] == "MISSING_API_KEY"

@@ -16,16 +16,14 @@ class APIKeyMiddleware(BaseHTTPMiddleware):
     EXEMPT_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json"}
 
     async def dispatch(self, request: Request, call_next):
-        # Skip authentication for exempt paths
         if request.url.path in self.EXEMPT_PATHS:
             return await call_next(request)
 
-        # Skip authentication for static files
         if request.url.path.startswith("/static"):
             return await call_next(request)
 
-        # Check API key
-        api_key = request.headers.get("X-API-Key") or request.query_params.get("api_key")
+        # Only accept API keys from headers to avoid leaking secrets in URLs.
+        api_key = request.headers.get("X-API-Key")
 
         if not api_key:
             return JSONResponse(
@@ -46,44 +44,29 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """Request logging middleware with timing."""
 
     async def dispatch(self, request: Request, call_next):
-        # Record start time
         start_time = time.time()
-
-        # Generate request ID
         request_id = f"{int(start_time * 1000)}"
 
-        # Log request
         logger.info(
             f"Request started: {request.method} {request.url.path}",
-            extra={"request_id": request_id}
+            extra={"request_id": request_id},
         )
 
-        # Process request
         response = await call_next(request)
-
-        # Calculate duration
         duration_ms = (time.time() - start_time) * 1000
 
-        # Log response
         logger.info(
             f"Request completed: {request.method} {request.url.path} "
             f"[{response.status_code}] {duration_ms:.1f}ms",
-            extra={"request_id": request_id}
+            extra={"request_id": request_id},
         )
 
-        # Add timing header
         response.headers["X-Process-Time"] = f"{duration_ms:.1f}ms"
-
         return response
 
 
 class RateLimitMiddleware(BaseHTTPMiddleware):
-    """Simple in-memory rate limiting middleware.
-
-    Limits based on:
-    - IP address for unauthenticated requests
-    - API key for authenticated requests
-    """
+    """Simple in-memory rate limiting middleware."""
 
     def __init__(self, app, requests_per_minute: int = 60):
         super().__init__(app)
@@ -92,12 +75,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
     def _get_client_id(self, request: Request) -> str:
         """Get client identifier for rate limiting."""
-        # Use API key if provided
         api_key = request.headers.get("X-API-Key")
         if api_key:
             return f"key:{api_key[:8]}"
 
-        # Fall back to IP address
         forwarded = request.headers.get("X-Forwarded-For")
         if forwarded:
             client_ip = forwarded.split(",")[0].strip()
@@ -115,17 +96,14 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             ]
 
     async def dispatch(self, request: Request, call_next):
-        # Skip rate limiting for health checks
         if request.url.path == "/health":
             return await call_next(request)
 
         client_id = self._get_client_id(request)
         now = time.time()
 
-        # Cleanup old requests
         self._cleanup_old_requests(client_id, now)
 
-        # Check rate limit
         if client_id not in self._requests:
             self._requests[client_id] = []
 
@@ -140,15 +118,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
                 headers={"Retry-After": "60"},
             )
 
-        # Record request
         self._requests[client_id].append(now)
-
-        # Process request
         response = await call_next(request)
 
-        # Add rate limit headers
         remaining = max(0, self.requests_per_minute - len(self._requests[client_id]))
         response.headers["X-RateLimit-Limit"] = str(self.requests_per_minute)
         response.headers["X-RateLimit-Remaining"] = str(remaining)
-
         return response
