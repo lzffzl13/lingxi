@@ -1,13 +1,14 @@
 """Agent and LLM client tests."""
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 from openai import APIError, APITimeoutError, RateLimitError
 from openai.types.chat import ChatCompletion, ChatCompletionMessage
 from openai.types.chat.chat_completion import Choice
 
 from app.agent.llm import LLMClient
-from app.agent.prompts import detect_scene, build_messages, SYSTEM_PROMPT
+from app.agent.prompts import SYSTEM_PROMPT, build_messages, detect_scene
 from app.models.message import Message, MessageRole
 
 
@@ -22,7 +23,7 @@ def mock_config():
     config.LLM_TEMPERATURE = 0.7
     config.LLM_MAX_TOKENS = 1024
     config.LLM_MAX_RETRIES = 3
-    config.LLM_RETRY_DELAY = 0.1  # Fast for testing
+    config.LLM_RETRY_DELAY = 0.1
     config.LLM_REQUEST_TIMEOUT = 10.0
     return config
 
@@ -82,7 +83,6 @@ class TestLLMClient:
         mock_response = create_mock_completion("success")
 
         with patch.object(llm_client.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
-            # First two calls fail, third succeeds
             mock_create.side_effect = [
                 APIError(message="Server error", request=MagicMock(), body=None),
                 APIError(message="Server error", request=MagicMock(), body=None),
@@ -119,20 +119,18 @@ class TestLLMClient:
             with pytest.raises(APIError):
                 await llm_client.chat([{"role": "user", "content": "hi"}])
 
-            assert mock_create.call_count == 3  # max_retries
+            assert mock_create.call_count == 3
 
     @pytest.mark.asyncio
     async def test_no_retry_on_client_error(self, llm_client):
         """Test that client errors are not retried when configured."""
-        # This test verifies that non-retryable exceptions propagate immediately
         with patch.object(llm_client.client.chat.completions, "create", new_callable=AsyncMock) as mock_create:
-            # ValueError is not a retryable error
             mock_create.side_effect = ValueError("Invalid parameter")
 
             with pytest.raises(ValueError):
                 await llm_client.chat([{"role": "user", "content": "hi"}])
 
-            assert mock_create.call_count == 1  # No retry
+            assert mock_create.call_count == 1
 
     @pytest.mark.asyncio
     async def test_health_check_success(self, llm_client):
@@ -188,7 +186,7 @@ class TestPrompts:
         history = []
         messages = build_messages(SYSTEM_PROMPT, history, "你好")
 
-        assert len(messages) == 2  # system + user
+        assert len(messages) == 2
         assert messages[0]["role"] == "system"
         assert messages[1]["role"] == "user"
         assert messages[1]["content"] == "你好"
@@ -201,7 +199,7 @@ class TestPrompts:
         ]
         messages = build_messages(SYSTEM_PROMPT, history, "你好")
 
-        assert len(messages) == 4  # system + 2 history + user
+        assert len(messages) == 4
         assert messages[1]["role"] == "user"
         assert messages[2]["role"] == "assistant"
 
@@ -209,7 +207,6 @@ class TestPrompts:
         """Test message building adds scene context."""
         messages = build_messages(SYSTEM_PROMPT, [], "帮我查一下订单")
 
-        # Should have system + scene context + user
         assert len(messages) == 3
         assert "场景提示" in messages[1]["content"]
 
@@ -221,5 +218,9 @@ class TestPrompts:
         ]
         messages = build_messages(SYSTEM_PROMPT, history, "你好")
 
-        # system + 5 history + user = 7
         assert len(messages) == 7
+
+    def test_system_prompt_is_readable_chinese(self):
+        """Test the system prompt contains readable guidance."""
+        assert "你是「灵犀」智能客服" in SYSTEM_PROMPT
+        assert "始终使用中文回复" in SYSTEM_PROMPT
