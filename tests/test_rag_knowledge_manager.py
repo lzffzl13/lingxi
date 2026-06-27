@@ -15,6 +15,7 @@ def make_config(api_key="not-set"):
     config = Settings()
     config.LLM_API_KEY = SecretStr(api_key)
     config.KNOWLEDGE_TOP_K = 3
+    config.VECTOR_BACKEND = "memory"
     return config
 
 
@@ -60,21 +61,43 @@ async def test_initialize_falls_back_when_pipeline_creation_fails():
 def test_create_embedding_func_prefers_openai_when_api_key_is_set():
     manager = RAGKnowledgeManager(make_config(api_key="test-key"))
 
-    with patch("app.knowledge.rag_manager.OpenAIEmbedding") as openai_embedding:
+    with (
+        patch("app.knowledge.rag_manager.OpenAIEmbedding") as openai_embedding,
+        patch("app.knowledge.rag_manager.CachedEmbeddingProvider") as cached_embedding,
+    ):
         result = manager._create_embedding_func()
 
-    openai_embedding.assert_called_once_with(api_key="test-key")
-    assert result == openai_embedding.return_value
+    openai_embedding.assert_called_once_with(
+        api_key="test-key",
+        model=manager.config.EMBEDDING_MODEL,
+        base_url=manager.config.LLM_BASE_URL,
+        dimension=manager.config.EMBEDDING_DIMENSION,
+    )
+    cached_embedding.assert_called_once()
+    assert result == cached_embedding.return_value
 
 
 def test_create_embedding_func_falls_back_to_local_embedding():
     manager = RAGKnowledgeManager(make_config(api_key="not-set"))
 
-    with patch("app.knowledge.rag_manager.LocalEmbedding") as local_embedding:
+    with (
+        patch("app.knowledge.rag_manager.LocalEmbedding") as local_embedding,
+        patch("app.knowledge.rag_manager.CachedEmbeddingProvider") as cached_embedding,
+    ):
         result = manager._create_embedding_func()
 
     local_embedding.assert_called_once_with(model_name="all-MiniLM-L6-v2")
-    assert result == local_embedding.return_value
+    cached_embedding.assert_called_once()
+    assert result == cached_embedding.return_value
+
+
+def test_create_vector_store_uses_memory_backend():
+    manager = RAGKnowledgeManager(make_config())
+
+    store = manager._create_vector_store(384)
+
+    assert store.__class__.__name__ == "InMemoryVectorStore"
+    assert store.dimension == 384
 
 
 @pytest.mark.asyncio

@@ -214,8 +214,12 @@ class ReActAgent:
                 messages=messages,
                 tools=get_all_tools(),
             ):
-                delta = chunk.choices[0].delta
-                finish_reason = chunk.choices[0].finish_reason
+                if not chunk.choices:
+                    continue
+
+                choice = chunk.choices[0]
+                delta = choice.delta
+                finish_reason = choice.finish_reason
 
                 # Stream text content
                 if delta.content:

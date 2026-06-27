@@ -1,22 +1,20 @@
 """RAG-based knowledge manager for enhanced FAQ search."""
 
+from __future__ import annotations
+
 from typing import Optional
 
+from app.cache import EmbeddingCache
 from app.config import Settings
-from app.rag import RAGPipeline, DocumentLoader
-from app.rag.rag_pipeline import OpenAIEmbedding, LocalEmbedding
+from app.rag import RAGPipeline
+from app.rag.embeddings import CachedEmbeddingProvider, LocalEmbedding, OpenAIEmbedding
+from app.rag.vector_store import InMemoryVectorStore
+from app.session.redis_client import get_redis
 from app.utils.logger import logger
 
 
 class RAGKnowledgeManager:
-    """Knowledge manager with RAG support.
-
-    Features:
-    - Semantic search using embeddings
-    - Fallback to keyword search
-    - Automatic FAQ indexing
-    - Configurable embedding model
-    """
+    """Knowledge manager with RAG support."""
 
     def __init__(self, config: Settings):
         self.config = config
@@ -24,81 +22,124 @@ class RAGKnowledgeManager:
         self._initialized = False
 
     async def initialize(self) -> None:
-        """Initialize the RAG pipeline."""
         if self._initialized:
             return
 
         try:
-            # Choose embedding function based on config
-            embedding_func = self._create_embedding_func()
+            embedding_provider = self._create_embedding_func()
+            await self._initialize_pipeline(embedding_provider)
+        except Exception as exc:
+            logger.warning(f"Primary embedding provider failed, retrying with local embeddings: {exc}")
+            try:
+                embedding_provider = self._create_local_embedding_func()
+                await self._initialize_pipeline(embedding_provider)
+            except Exception as fallback_exc:
+                logger.error(f"Failed to initialize RAG: {fallback_exc}")
+                self._initialized = False
 
-            # Create RAG pipeline
-            self._rag_pipeline = RAGPipeline(
-                embedding_func=embedding_func,
-                chunk_size=500,
-                chunk_overlap=50,
-                vector_dimension=1536,
-                persist_directory="./data/rag_vectors",
-            )
+    async def _initialize_pipeline(self, embedding_provider) -> None:
+        vector_dimension = getattr(embedding_provider, "dimension", self.config.EMBEDDING_DIMENSION)
+        vector_store = self._create_vector_store(vector_dimension)
 
-            # Load FAQ data
-            await self._load_faq_data()
+        self._rag_pipeline = RAGPipeline(
+            embedding_func=embedding_provider,
+            chunk_size=500,
+            chunk_overlap=50,
+            vector_dimension=vector_dimension,
+            persist_directory=self.config.VECTOR_PERSIST_DIRECTORY,
+            vector_store=vector_store,
+        )
 
-            self._initialized = True
-            logger.info("RAG Knowledge Manager initialized successfully")
-
-        except Exception as e:
-            logger.error(f"Failed to initialize RAG: {e}")
-            # Fallback to no RAG
-            self._initialized = False
+        await self._load_faq_data()
+        self._initialized = True
+        logger.info("RAG Knowledge Manager initialized successfully")
 
     def _create_embedding_func(self):
-        """Create embedding function based on configuration."""
-        # Try to use OpenAI embedding if API key is available
-        api_key = self.config.LLM_API_KEY.get_secret_value()
-        if api_key and api_key != "not-set":
-            return OpenAIEmbedding(api_key=api_key)
+        api_key = self.config.EMBEDDING_API_KEY.get_secret_value()
+        base_url = self.config.EMBEDDING_BASE_URL
+        if api_key == "not-set":
+            api_key = self.config.LLM_API_KEY.get_secret_value()
+            base_url = self.config.LLM_BASE_URL
 
-        # Fallback to local embedding
-        try:
-            return LocalEmbedding(model_name="all-MiniLM-L6-v2")
-        except ImportError:
-            logger.warning("No embedding model available, RAG disabled")
-            return None
+        provider = None
+        if api_key and api_key != "not-set":
+            provider = OpenAIEmbedding(
+                api_key=api_key,
+                model=self.config.EMBEDDING_MODEL,
+                base_url=base_url,
+                dimension=self.config.EMBEDDING_DIMENSION,
+            )
+        else:
+            try:
+                provider = LocalEmbedding(model_name=self.config.EMBEDDING_LOCAL_MODEL)
+            except ImportError:
+                logger.warning("No embedding model available, RAG disabled")
+                return None
+
+        if not self.config.EMBEDDING_CACHE_ENABLED:
+            return provider
+
+        return CachedEmbeddingProvider(
+            provider=provider,
+            cache=EmbeddingCache(
+                redis_client=get_redis(),
+                ttl_seconds=self.config.EMBEDDING_CACHE_TTL_SECONDS,
+            ),
+        )
+
+    def _create_local_embedding_func(self):
+        provider = LocalEmbedding(model_name=self.config.EMBEDDING_LOCAL_MODEL)
+        if not self.config.EMBEDDING_CACHE_ENABLED:
+            return provider
+
+        return CachedEmbeddingProvider(
+            provider=provider,
+            cache=EmbeddingCache(
+                redis_client=get_redis(),
+                ttl_seconds=self.config.EMBEDDING_CACHE_TTL_SECONDS,
+            ),
+        )
+
+    def _create_vector_store(self, vector_dimension: int):
+        backend = self.config.VECTOR_BACKEND.lower()
+
+        if backend == "memory":
+            return InMemoryVectorStore(dimension=vector_dimension)
+
+        if backend == "qdrant":
+            from app.rag.qdrant_store import QdrantVectorStore
+
+            api_key = self.config.QDRANT_API_KEY.get_secret_value()
+            return QdrantVectorStore(
+                dimension=vector_dimension,
+                url=self.config.QDRANT_URL,
+                collection_name=self.config.QDRANT_COLLECTION,
+                api_key=None if api_key == "not-set" else api_key,
+            )
+
+        raise ValueError(f"Unsupported vector backend: {self.config.VECTOR_BACKEND}")
 
     async def _load_faq_data(self) -> None:
-        """Load FAQ data into RAG pipeline."""
         if not self._rag_pipeline:
             return
 
-        # Import FAQ data from existing knowledge manager
         from app.knowledge.manager import FAQ_DATABASE
 
-        # Convert to RAG format
         faq_list = []
         for faq in FAQ_DATABASE:
-            faq_list.append({
-                "id": faq.get("question", ""),
-                "question": faq["question"],
-                "answer": faq["answer"],
-                "category": faq.get("category", "general"),
-            })
+            faq_list.append(
+                {
+                    "id": faq.get("question", ""),
+                    "question": faq["question"],
+                    "answer": faq["answer"],
+                    "category": faq.get("category", "general"),
+                }
+            )
 
-        # Add to RAG pipeline
         chunks_added = await self._rag_pipeline.add_faq_data(faq_list)
         logger.info(f"Loaded {chunks_added} FAQ chunks into RAG pipeline")
 
     async def search(self, query: str, top_k: int = 3) -> list[dict]:
-        """Search FAQ using RAG with fallback to keyword matching.
-
-        Args:
-            query: Search query
-            top_k: Number of results to return
-
-        Returns:
-            List of matching FAQ entries with scores
-        """
-        # Try RAG search first
         if self._initialized and self._rag_pipeline:
             try:
                 results = await self._rag_pipeline.search(query, top_k=top_k)
@@ -106,37 +147,25 @@ class RAGKnowledgeManager:
                     return [
                         {
                             "question": result.chunk.metadata.get("question", ""),
-                            "answer": result.chunk.content.split("答案：")[-1] if "答案：" in result.chunk.content else result.chunk.content,
+                            "answer": result.chunk.metadata.get("answer", result.chunk.content),
                             "category": result.chunk.metadata.get("category", "general"),
                             "score": result.score,
                             "source": "rag",
                         }
                         for result in results
                     ]
-            except Exception as e:
-                logger.warning(f"RAG search failed, falling back to keyword: {e}")
+            except Exception as exc:
+                logger.warning(f"RAG search failed, falling back to keyword: {exc}")
 
-        # Fallback to keyword search
         from app.knowledge.manager import KnowledgeManager
+
         fallback_manager = KnowledgeManager(self.config)
         results = await fallback_manager.search(query, top_k=top_k)
-
-        # Add source tag
         for result in results:
             result["source"] = "keyword"
-
         return results
 
     async def add_document(self, content: str, metadata: Optional[dict] = None) -> int:
-        """Add a document to the RAG pipeline.
-
-        Args:
-            content: Document content
-            metadata: Optional metadata
-
-        Returns:
-            Number of chunks added
-        """
         if not self._initialized or not self._rag_pipeline:
             logger.warning("RAG pipeline not initialized")
             return 0
@@ -145,11 +174,9 @@ class RAGKnowledgeManager:
             "content": content,
             "metadata": metadata or {},
         }
-
         return await self._rag_pipeline.add_documents([document])
 
     def get_stats(self) -> dict:
-        """Get RAG pipeline statistics."""
         if not self._rag_pipeline:
             return {"initialized": False}
 
@@ -158,7 +185,6 @@ class RAGKnowledgeManager:
         return stats
 
     def clear_cache(self) -> None:
-        """Clear all caches."""
         if self._rag_pipeline:
             self._rag_pipeline.vector_store.clear()
             logger.info("RAG vector store cleared")

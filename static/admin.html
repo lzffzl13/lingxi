@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>灵犀客服 - 管理后台</title>
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <style>
         :root {
             --primary: #0ea5e9;
@@ -14,8 +13,6 @@
             --text: #0c4a6e;
             --text-light: #64748b;
             --border: #bae6fd;
-            --success: #10b981;
-            --warning: #f59e0b;
             --danger: #ef4444;
             --sidebar-width: 240px;
         }
@@ -28,7 +25,6 @@
             min-height: 100vh;
         }
 
-        /* Sidebar */
         .sidebar {
             position: fixed;
             left: 0;
@@ -47,16 +43,8 @@
             margin-bottom: 20px;
         }
 
-        .sidebar-header h1 {
-            font-size: 20px;
-            font-weight: 600;
-        }
-
-        .sidebar-header p {
-            font-size: 12px;
-            opacity: 0.7;
-            margin-top: 4px;
-        }
+        .sidebar-header h1 { font-size: 20px; font-weight: 600; }
+        .sidebar-header p { font-size: 12px; opacity: 0.7; margin-top: 4px; }
 
         .nav-item {
             display: flex;
@@ -73,12 +61,6 @@
             color: white;
         }
 
-        .nav-item i {
-            font-size: 20px;
-            width: 24px;
-        }
-
-        /* Main Content */
         .main {
             margin-left: var(--sidebar-width);
             padding: 20px;
@@ -91,13 +73,8 @@
             margin-bottom: 24px;
         }
 
-        .page-title {
-            font-size: 24px;
-            font-weight: 600;
-            color: var(--text);
-        }
+        .page-title { font-size: 24px; font-weight: 600; color: var(--text); }
 
-        /* Stats Cards */
         .stats-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
@@ -105,93 +82,34 @@
             margin-bottom: 24px;
         }
 
-        .stat-card {
+        .stat-card, .card {
             background: var(--card);
             border-radius: 16px;
-            padding: 20px;
+            padding: 20px 24px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.04);
         }
 
-        .stat-label {
-            font-size: 14px;
-            color: var(--text-light);
-            margin-bottom: 8px;
-        }
+        .card { margin-bottom: 24px; }
+        .stat-label { font-size: 14px; color: var(--text-light); margin-bottom: 8px; }
+        .stat-value { font-size: 32px; font-weight: 700; color: var(--text); }
+        .card-title { font-size: 18px; font-weight: 600; color: var(--text); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
 
-        .stat-value {
-            font-size: 32px;
-            font-weight: 700;
-            color: var(--text);
-        }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+        th { font-weight: 600; color: var(--text-light); font-size: 13px; }
+        td { font-size: 14px; color: var(--text); }
+        tr:hover { background: var(--bg); }
 
-        .stat-change {
-            font-size: 12px;
-            margin-top: 4px;
-        }
-
-        .stat-change.positive { color: var(--success); }
-        .stat-change.negative { color: var(--danger); }
-
-        /* Tables */
-        .card {
-            background: var(--card);
-            border-radius: 16px;
-            padding: 24px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-            margin-bottom: 24px;
-        }
-
-        .card-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: var(--text);
-            margin-bottom: 16px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        th, td {
-            padding: 12px 16px;
-            text-align: left;
-            border-bottom: 1px solid var(--border);
-        }
-
-        th {
-            font-weight: 600;
-            color: var(--text-light);
-            font-size: 13px;
-        }
-
-        td {
-            font-size: 14px;
-            color: var(--text);
-        }
-
-        tr:hover {
-            background: var(--bg);
-        }
-
-        /* Badges */
         .badge {
             display: inline-block;
             padding: 4px 8px;
             border-radius: 8px;
             font-size: 12px;
             font-weight: 500;
+            background: #e0f2fe;
+            color: #075985;
         }
 
-        .badge-success { background: #d1fae5; color: #065f46; }
-        .badge-warning { background: #fef3c7; color: #92400e; }
-        .badge-danger { background: #fee2e2; color: #991b1b; }
-        .badge-info { background: #e0f2fe; color: #075985; }
-
-        /* Buttons */
         .btn {
             display: inline-flex;
             align-items: center;
@@ -205,44 +123,22 @@
             transition: all 0.2s;
         }
 
-        .btn-primary {
-            background: var(--primary);
-            color: white;
-        }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-primary:hover { background: var(--primary-dark); transform: translateY(-1px); }
+        .btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+        .btn-danger { background: var(--danger); color: white; }
 
-        .btn-primary:hover {
-            background: var(--primary-dark);
-            transform: translateY(-1px);
-        }
-
-        .btn-secondary {
-            background: var(--bg);
-            color: var(--text);
-            border: 1px solid var(--border);
-        }
-
-        .btn-danger {
-            background: var(--danger);
-            color: white;
-        }
-
-        /* Modal */
         .modal-overlay {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            inset: 0;
             background: rgba(0,0,0,0.5);
             z-index: 200;
             justify-content: center;
             align-items: center;
         }
 
-        .modal-overlay.active {
-            display: flex;
-        }
+        .modal-overlay.active { display: flex; }
 
         .modal {
             background: var(--card);
@@ -254,24 +150,9 @@
             overflow-y: auto;
         }
 
-        .modal-title {
-            font-size: 20px;
-            font-weight: 600;
-            margin-bottom: 20px;
-        }
-
-        .form-group {
-            margin-bottom: 16px;
-        }
-
-        .form-label {
-            display: block;
-            font-size: 14px;
-            font-weight: 500;
-            color: var(--text);
-            margin-bottom: 6px;
-        }
-
+        .modal-title { font-size: 20px; font-weight: 600; margin-bottom: 20px; }
+        .form-group { margin-bottom: 16px; }
+        .form-label { display: block; font-size: 14px; font-weight: 500; color: var(--text); margin-bottom: 6px; }
         .form-input, .form-textarea {
             width: 100%;
             padding: 10px 14px;
@@ -279,35 +160,13 @@
             border-radius: 12px;
             font-size: 14px;
             outline: none;
-            transition: border-color 0.2s;
         }
 
-        .form-input:focus, .form-textarea:focus {
-            border-color: var(--primary);
-        }
+        .form-textarea { min-height: 100px; resize: vertical; }
+        .modal-actions { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+        .page-section { display: none; }
+        .page-section.active { display: block; }
 
-        .form-textarea {
-            min-height: 100px;
-            resize: vertical;
-        }
-
-        .modal-actions {
-            display: flex;
-            gap: 12px;
-            justify-content: flex-end;
-            margin-top: 24px;
-        }
-
-        /* Page sections */
-        .page-section {
-            display: none;
-        }
-
-        .page-section.active {
-            display: block;
-        }
-
-        /* Conversation viewer */
         .conversation-viewer {
             max-height: 400px;
             overflow-y: auto;
@@ -329,13 +188,11 @@
             background: var(--primary);
             color: white;
             margin-left: auto;
-            border-bottom-right-radius: 4px;
         }
 
         .msg-bubble.assistant {
             background: white;
             color: var(--text);
-            border-bottom-left-radius: 4px;
         }
 
         .msg-meta {
@@ -344,14 +201,9 @@
             margin-top: 4px;
         }
 
-        /* Responsive */
         @media (max-width: 768px) {
-            .sidebar {
-                transform: translateX(-100%);
-            }
-            .main {
-                margin-left: 0;
-            }
+            .sidebar { transform: translateX(-100%); }
+            .main { margin-left: 0; }
         }
     </style>
 </head>
@@ -361,130 +213,71 @@
             <h1>灵犀客服</h1>
             <p>管理后台</p>
         </div>
-        <div class="nav-item active" data-page="dashboard">
-            <i class="ri-dashboard-line"></i> 数据看板
-        </div>
-        <div class="nav-item" data-page="conversations">
-            <i class="ri-chat-3-line"></i> 对话管理
-        </div>
-        <div class="nav-item" data-page="faq">
-            <i class="ri-question-answer-line"></i> FAQ管理
-        </div>
-        <div class="nav-item" data-page="tools">
-            <i class="ri-tools-line"></i> 工具统计
-        </div>
+        <div class="nav-item active" data-page="dashboard">📊 数据看板</div>
+        <div class="nav-item" data-page="conversations">💬 对话管理</div>
+        <div class="nav-item" data-page="faq">❓ FAQ 管理</div>
+        <div class="nav-item" data-page="tools">🛠️ 工具统计</div>
     </div>
 
     <div class="main">
-        <!-- Dashboard -->
         <div class="page-section active" id="page-dashboard">
             <div class="page-header">
                 <h2 class="page-title">数据看板</h2>
                 <select id="statsPeriod" class="form-input" style="width: auto;">
-                    <option value="7">最近7天</option>
-                    <option value="30">最近30天</option>
-                    <option value="90">最近90天</option>
+                    <option value="7">最近 7 天</option>
+                    <option value="30">最近 30 天</option>
+                    <option value="90">最近 90 天</option>
                 </select>
             </div>
 
             <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">总对话数</div>
-                    <div class="stat-value" id="statConversations">-</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">解决率</div>
-                    <div class="stat-value" id="statResolutionRate">-</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">总消息数</div>
-                    <div class="stat-value" id="statMessages">-</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">平均满意度</div>
-                    <div class="stat-value" id="statSatisfaction">-</div>
-                </div>
+                <div class="stat-card"><div class="stat-label">总对话数</div><div class="stat-value" id="statConversations">-</div></div>
+                <div class="stat-card"><div class="stat-label">解决率</div><div class="stat-value" id="statResolutionRate">-</div></div>
+                <div class="stat-card"><div class="stat-label">总消息数</div><div class="stat-value" id="statMessages">-</div></div>
+                <div class="stat-card"><div class="stat-label">平均满意度</div><div class="stat-value" id="statSatisfaction">-</div></div>
             </div>
 
             <div class="card">
-                <div class="card-title"><i class="ri-tools-line"></i> 工具使用统计</div>
+                <div class="card-title">🛠️ 工具使用统计</div>
                 <table>
-                    <thead>
-                        <tr>
-                            <th>工具名称</th>
-                            <th>调用次数</th>
-                            <th>占比</th>
-                        </tr>
-                    </thead>
-                    <tbody id="toolStatsBody">
-                    </tbody>
+                    <thead><tr><th>工具名称</th><th>调用次数</th><th>占比</th></tr></thead>
+                    <tbody id="toolStatsBody"></tbody>
                 </table>
             </div>
         </div>
 
-        <!-- Conversations -->
         <div class="page-section" id="page-conversations">
-            <div class="page-header">
-                <h2 class="page-title">对话管理</h2>
-            </div>
-
+            <div class="page-header"><h2 class="page-title">对话管理</h2></div>
             <div class="card">
                 <table>
-                    <thead>
-                        <tr>
-                            <th>对话ID</th>
-                            <th>用户ID</th>
-                            <th>状态</th>
-                            <th>开始时间</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="conversationsBody">
-                    </tbody>
+                    <thead><tr><th>对话 ID</th><th>用户 ID</th><th>状态</th><th>开始时间</th><th>操作</th></tr></thead>
+                    <tbody id="conversationsBody"></tbody>
                 </table>
             </div>
         </div>
 
-        <!-- FAQ Management -->
         <div class="page-section" id="page-faq">
             <div class="page-header">
-                <h2 class="page-title">FAQ管理</h2>
-                <button class="btn btn-primary" onclick="openFaqModal()">
-                    <i class="ri-add-line"></i> 添加FAQ
-                </button>
+                <h2 class="page-title">FAQ 管理</h2>
+                <button class="btn btn-primary" onclick="openFaqModal()">➕ 添加 FAQ</button>
             </div>
-
             <div class="card">
                 <table>
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>问题</th>
-                            <th>分类</th>
-                            <th>操作</th>
-                        </tr>
-                    </thead>
-                    <tbody id="faqBody">
-                    </tbody>
+                    <thead><tr><th>ID</th><th>问题</th><th>分类</th><th>操作</th></tr></thead>
+                    <tbody id="faqBody"></tbody>
                 </table>
             </div>
         </div>
 
-        <!-- Tool Stats -->
         <div class="page-section" id="page-tools">
-            <div class="page-header">
-                <h2 class="page-title">工具详情</h2>
-            </div>
-            <div class="card">
-                <p style="color: var(--text-light);">工具详细调用记录将在数据看板中展示。</p>
-            </div>
+            <div class="page-header"><h2 class="page-title">工具详情</h2></div>
+            <div class="card"><p style="color: var(--text-light);">工具详细调用记录会在数据看板中展示。</p></div>
         </div>
     </div>
 
-    <!-- FAQ Modal -->
     <div class="modal-overlay" id="faqModal">
         <div class="modal">
-            <div class="modal-title" id="faqModalTitle">添加FAQ</div>
+            <div class="modal-title" id="faqModalTitle">添加 FAQ</div>
             <input type="hidden" id="faqId">
             <div class="form-group">
                 <label class="form-label">问题</label>
@@ -499,7 +292,7 @@
                 <input type="text" class="form-input" id="faqCategory" placeholder="如：订单、退换货">
             </div>
             <div class="form-group">
-                <label class="form-label">关键词 (逗号分隔)</label>
+                <label class="form-label">关键词（逗号分隔）</label>
                 <input type="text" class="form-input" id="faqKeywords" placeholder="关键词1,关键词2">
             </div>
             <div class="modal-actions">
@@ -509,7 +302,6 @@
         </div>
     </div>
 
-    <!-- Conversation Modal -->
     <div class="modal-overlay" id="conversationModal">
         <div class="modal" style="max-width: 600px;">
             <div class="modal-title">对话详情</div>
@@ -521,9 +313,9 @@
     </div>
 
     <script>
-        const API = 'http://localhost:8000';
+        const API = window.location.origin;
+        const API_HEADERS = { "X-API-Key": "lingxi-api-key-change-me" };
 
-        // Navigation
         document.querySelectorAll('.nav-item').forEach(item => {
             item.addEventListener('click', () => {
                 document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
@@ -533,22 +325,17 @@
             });
         });
 
-        // Load stats
         async function loadStats(days = 7) {
             try {
-                const res = await fetch(`${API}/analytics/stats?days=${days}`);
+                const res = await fetch(`${API}/analytics/stats?days=${days}`, { headers: API_HEADERS });
                 const data = await res.json();
-
                 document.getElementById('statConversations').textContent = data.total_conversations;
-                document.getElementById('statResolutionRate').textContent =
-                    `${(data.resolution_rate * 100).toFixed(1)}%`;
+                document.getElementById('statResolutionRate').textContent = `${(data.resolution_rate * 100).toFixed(1)}%`;
                 document.getElementById('statMessages').textContent = data.total_messages;
-                document.getElementById('statSatisfaction').textContent =
-                    data.avg_satisfaction ? `${data.avg_satisfaction}/5` : 'N/A';
+                document.getElementById('statSatisfaction').textContent = data.avg_satisfaction ? `${data.avg_satisfaction}/5` : 'N/A';
 
-                // Tool stats
                 const tbody = document.getElementById('toolStatsBody');
-                const total = Object.values(data.tool_usage).reduce((a, b) => a + b, 0);
+                const total = Object.values(data.tool_usage).reduce((a, b) => a + b, 0) || 1;
                 tbody.innerHTML = Object.entries(data.tool_usage)
                     .sort((a, b) => b[1] - a[1])
                     .map(([name, count]) => `
@@ -558,37 +345,35 @@
                             <td>${((count / total) * 100).toFixed(1)}%</td>
                         </tr>
                     `).join('');
-            } catch (e) {
-                console.error('Failed to load stats:', e);
+            } catch (error) {
+                console.error('Failed to load stats:', error);
             }
         }
 
-        // Load FAQs
         async function loadFaqs() {
             try {
-                const res = await fetch(`${API}/knowledge/faq`);
+                const res = await fetch(`${API}/knowledge/faq`, { headers: API_HEADERS });
                 const data = await res.json();
                 const tbody = document.getElementById('faqBody');
                 tbody.innerHTML = data.map(faq => `
                     <tr>
                         <td>${faq.id}</td>
                         <td>${faq.question}</td>
-                        <td><span class="badge badge-info">${faq.category || '-'}</span></td>
+                        <td><span class="badge">${faq.category || '-'}</span></td>
                         <td>
                             <button class="btn btn-secondary" onclick="editFaq(${faq.id})" style="padding: 6px 12px; font-size: 12px;">编辑</button>
                             <button class="btn btn-danger" onclick="deleteFaq(${faq.id})" style="padding: 6px 12px; font-size: 12px;">删除</button>
                         </td>
                     </tr>
                 `).join('');
-            } catch (e) {
-                console.error('Failed to load FAQs:', e);
+            } catch (error) {
+                console.error('Failed to load FAQs:', error);
             }
         }
 
-        // FAQ Modal
         function openFaqModal(id = null) {
             document.getElementById('faqModal').classList.add('active');
-            document.getElementById('faqModalTitle').textContent = id ? '编辑FAQ' : '添加FAQ';
+            document.getElementById('faqModalTitle').textContent = id ? '编辑 FAQ' : '添加 FAQ';
             document.getElementById('faqId').value = id || '';
             if (!id) {
                 document.getElementById('faqQuestion').value = '';
@@ -604,18 +389,17 @@
 
         async function editFaq(id) {
             try {
-                const res = await fetch(`${API}/knowledge/faq`);
+                const res = await fetch(`${API}/knowledge/faq`, { headers: API_HEADERS });
                 const faqs = await res.json();
-                const faq = faqs.find(f => f.id === id);
-                if (faq) {
-                    document.getElementById('faqQuestion').value = faq.question;
-                    document.getElementById('faqAnswer').value = faq.answer;
-                    document.getElementById('faqCategory').value = faq.category || '';
-                    document.getElementById('faqKeywords').value = (faq.keywords || []).join(',');
-                    openFaqModal(id);
-                }
-            } catch (e) {
-                console.error('Failed to load FAQ:', e);
+                const faq = faqs.find(item => item.id === id);
+                if (!faq) return;
+                document.getElementById('faqQuestion').value = faq.question;
+                document.getElementById('faqAnswer').value = faq.answer;
+                document.getElementById('faqCategory').value = faq.category || '';
+                document.getElementById('faqKeywords').value = (faq.keywords || []).join(',');
+                openFaqModal(id);
+            } catch (error) {
+                console.error('Failed to load FAQ:', error);
             }
         }
 
@@ -625,7 +409,7 @@
                 question: document.getElementById('faqQuestion').value,
                 answer: document.getElementById('faqAnswer').value,
                 category: document.getElementById('faqCategory').value || null,
-                keywords: document.getElementById('faqKeywords').value.split(',').map(k => k.trim()).filter(Boolean),
+                keywords: document.getElementById('faqKeywords').value.split(',').map(k => k.trim()).filter(Boolean)
             };
 
             try {
@@ -633,37 +417,34 @@
                 const method = id ? 'PUT' : 'POST';
                 await fetch(url, {
                     method,
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data),
+                    headers: { ...API_HEADERS, "Content-Type": "application/json" },
+                    body: JSON.stringify(data)
                 });
                 closeFaqModal();
                 loadFaqs();
-            } catch (e) {
-                console.error('Failed to save FAQ:', e);
+            } catch (error) {
+                console.error('Failed to save FAQ:', error);
             }
         }
 
         async function deleteFaq(id) {
-            if (!confirm('确定删除这条FAQ吗？')) return;
+            if (!confirm('确定删除这条 FAQ 吗？')) return;
             try {
-                await fetch(`${API}/knowledge/faq/${id}`, { method: 'DELETE' });
+                await fetch(`${API}/knowledge/faq/${id}`, { method: 'DELETE', headers: API_HEADERS });
                 loadFaqs();
-            } catch (e) {
-                console.error('Failed to delete FAQ:', e);
+            } catch (error) {
+                console.error('Failed to delete FAQ:', error);
             }
         }
 
-        // Conversation viewer
         function closeConversationModal() {
             document.getElementById('conversationModal').classList.remove('active');
         }
 
-        // Period selector
-        document.getElementById('statsPeriod').addEventListener('change', (e) => {
-            loadStats(parseInt(e.target.value));
+        document.getElementById('statsPeriod').addEventListener('change', (event) => {
+            loadStats(parseInt(event.target.value, 10));
         });
 
-        // Initial load
         loadStats();
         loadFaqs();
     </script>

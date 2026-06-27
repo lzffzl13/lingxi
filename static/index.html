@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>灵犀智能客服</title>
-    <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
     <style>
         :root {
             --primary: #0ea5e9;
@@ -15,9 +14,7 @@
             --text-light: #64748b;
             --border: #bae6fd;
             --user-bg: linear-gradient(135deg, #0ea5e9 0%, #06b6d4 100%);
-            --bot-bg: #e0f2fe;
             --success: #10b981;
-            --warning: #f59e0b;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -45,7 +42,6 @@
             border: 1px solid var(--border);
         }
 
-        /* Header */
         .header {
             background: var(--user-bg);
             padding: 24px;
@@ -79,14 +75,18 @@
             gap: 12px;
         }
 
+        .avatar, .msg-avatar, .feature-icon, .send-btn, .quick-btn .icon, .tool-info .icon, .welcome-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+
         .avatar {
             width: 48px;
             height: 48px;
             background: rgba(255,255,255,0.2);
             border-radius: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             font-size: 24px;
             backdrop-filter: blur(10px);
         }
@@ -116,7 +116,6 @@
             50% { transform: scale(1.1); }
         }
 
-        /* Quick Actions */
         .quick-actions {
             padding: 16px 20px;
             display: flex;
@@ -148,11 +147,6 @@
             transform: translateY(-2px);
         }
 
-        .quick-btn i {
-            font-size: 16px;
-        }
-
-        /* Messages */
         .messages {
             flex: 1;
             overflow-y: auto;
@@ -184,9 +178,6 @@
             width: 36px;
             height: 36px;
             border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             flex-shrink: 0;
             font-size: 18px;
         }
@@ -242,11 +233,6 @@
             gap: 6px;
         }
 
-        .tool-info i {
-            font-size: 16px;
-        }
-
-        /* Typing Indicator */
         .typing {
             display: flex;
             gap: 4px;
@@ -274,7 +260,6 @@
             30% { transform: translateY(-8px); }
         }
 
-        /* Input */
         .input-area {
             padding: 16px 20px;
             background: white;
@@ -317,9 +302,6 @@
             border-radius: 16px;
             color: white;
             cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             font-size: 20px;
             transition: all 0.2s;
         }
@@ -335,25 +317,11 @@
             transform: none;
         }
 
-        /* Scrollbar */
-        .messages::-webkit-scrollbar {
-            width: 6px;
-        }
+        .messages::-webkit-scrollbar { width: 6px; }
+        .messages::-webkit-scrollbar-track { background: transparent; }
+        .messages::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        .messages::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
-        .messages::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .messages::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 3px;
-        }
-
-        .messages::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
-        }
-
-        /* Welcome */
         .welcome {
             text-align: center;
             padding: 30px 20px;
@@ -383,18 +351,13 @@
             margin-top: 20px;
         }
 
-        .feature {
-            text-align: center;
-        }
+        .feature { text-align: center; }
 
         .feature-icon {
             width: 44px;
             height: 44px;
             background: linear-gradient(135deg, #e0f2fe 0%, #bae6fd 100%);
             border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
             margin: 0 auto 8px;
             font-size: 20px;
             color: #0284c7;
@@ -404,6 +367,22 @@
             font-size: 12px;
             color: var(--text-light);
         }
+
+        .icon { min-width: 1.2em; }
+        .cursor { animation: blink 1s infinite; color: #0ea5e9; }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0; }
+        }
+
+        code {
+            background: #e0f2fe;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #0369a1;
+        }
     </style>
 </head>
 <body>
@@ -411,9 +390,7 @@
         <div class="header">
             <div class="header-top">
                 <div class="header-info">
-                    <div class="avatar">
-                        <i class="ri-robot-2-line"></i>
-                    </div>
+                    <div class="avatar"><span class="icon">🤖</span></div>
                     <div class="header-text">
                         <h1>灵犀智能客服</h1>
                         <p>AI 驱动 · 7x24 小时在线</p>
@@ -425,41 +402,39 @@
 
         <div class="quick-actions">
             <button class="quick-btn" onclick="quickMsg('帮我查一下订单 ORD-20240101-001')">
-                <i class="ri-search-line"></i> 查订单
+                <span class="icon">🔎</span> 查订单
             </button>
             <button class="quick-btn" onclick="quickMsg('我想退货，订单号 ORD-20240103-003')">
-                <i class="ri-exchange-line"></i> 退换货
+                <span class="icon">🔁</span> 退换货
             </button>
             <button class="quick-btn" onclick="quickMsg('退款多久到账？')">
-                <i class="ri-question-line"></i> 常见问题
+                <span class="icon">❓</span> 常见问题
             </button>
             <button class="quick-btn" onclick="quickMsg('转人工客服')">
-                <i class="ri-customer-service-2-line"></i> 转人工
+                <span class="icon">🎧</span> 转人工
             </button>
         </div>
 
         <div class="messages" id="messages">
             <div class="welcome">
-                <div class="welcome-icon">
-                    <i class="ri-sparkling-2-fill" style="color: var(--primary)"></i>
-                </div>
+                <div class="welcome-icon">✨</div>
                 <h2>您好，我是灵犀</h2>
                 <p>智能客服助手，很高兴为您服务<br>请问有什么可以帮您的？</p>
                 <div class="features">
                     <div class="feature">
-                        <div class="feature-icon"><i class="ri-search-line"></i></div>
+                        <div class="feature-icon">🔎</div>
                         <span>订单查询</span>
                     </div>
                     <div class="feature">
-                        <div class="feature-icon"><i class="ri-exchange-line"></i></div>
+                        <div class="feature-icon">🔁</div>
                         <span>退换货</span>
                     </div>
                     <div class="feature">
-                        <div class="feature-icon"><i class="ri-book-open-line"></i></div>
+                        <div class="feature-icon">📘</div>
                         <span>FAQ</span>
                     </div>
                     <div class="feature">
-                        <div class="feature-icon"><i class="ri-customer-service-2-line"></i></div>
+                        <div class="feature-icon">🎧</div>
                         <span>人工客服</span>
                     </div>
                 </div>
@@ -472,14 +447,14 @@
                     <input type="text" id="input" placeholder="输入您的问题..." onkeydown="if(event.key==='Enter')send()">
                 </div>
                 <button class="send-btn" id="sendBtn" onclick="send()">
-                    <i class="ri-send-plane-2-fill"></i>
+                    <span class="icon">➤</span>
                 </button>
             </div>
         </div>
     </div>
 
     <script>
-        const API = 'http://localhost:8000';
+        const API = window.location.origin;
         const session = 'web-' + Date.now();
         const msgs = document.getElementById('messages');
         const input = document.getElementById('input');
@@ -507,7 +482,7 @@
 
             const avatar = document.createElement('div');
             avatar.className = 'msg-avatar';
-            avatar.innerHTML = role === 'bot' ? '<i class="ri-robot-2-line"></i>' : '<i class="ri-user-3-line"></i>';
+            avatar.textContent = role === 'bot' ? '🤖' : '🧑';
 
             const content = document.createElement('div');
             content.className = 'msg-content';
@@ -534,7 +509,7 @@
         function addToolInfo(contentEl, tools) {
             const toolDiv = document.createElement('div');
             toolDiv.className = 'tool-info';
-            toolDiv.innerHTML = `<i class="ri-tools-line"></i> ${tools.map(t => toolNames[t] || t).join(' + ')}`;
+            toolDiv.innerHTML = `<span class="icon">🛠️</span> ${tools.map(t => toolNames[t] || t).join(' + ')}`;
             contentEl.appendChild(toolDiv);
         }
 
@@ -546,15 +521,14 @@
 
             const div = document.createElement('div');
             div.className = 'message bot';
-            div.id = 'streaming-msg';
 
             const avatar = document.createElement('div');
             avatar.className = 'msg-avatar';
-            avatar.innerHTML = '<i class="ri-robot-2-line"></i>';
+            avatar.textContent = '🤖';
 
             const content = document.createElement('div');
             content.className = 'msg-content';
-            content.innerHTML = '<span class="cursor">▊</span>';
+            content.innerHTML = '<span class="cursor">▌</span>';
 
             div.appendChild(avatar);
             div.appendChild(content);
@@ -567,11 +541,10 @@
 
         function appendToStream(text) {
             if (!currentContent) return;
-            // Remove cursor, add text, re-add cursor
             const cursor = currentContent.querySelector('.cursor');
             if (cursor) cursor.remove();
             currentContent.innerHTML += formatText(text);
-            currentContent.innerHTML += '<span class="cursor">▊</span>';
+            currentContent.innerHTML += '<span class="cursor">▌</span>';
             msgs.scrollTop = msgs.scrollHeight;
         }
 
@@ -584,22 +557,6 @@
             }
             currentBotMsg = null;
             currentContent = null;
-        }
-
-        function showTyping() {
-            const div = document.createElement('div');
-            div.className = 'message bot';
-            div.id = 'typing';
-            div.innerHTML = `
-                <div class="msg-avatar"><i class="ri-robot-2-line"></i></div>
-                <div class="typing">
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                    <div class="typing-dot"></div>
-                </div>
-            `;
-            msgs.appendChild(div);
-            msgs.scrollTop = msgs.scrollHeight;
         }
 
         function hideTyping() {
@@ -615,10 +572,12 @@
             sendBtn.disabled = true;
 
             try {
-                // Use streaming endpoint
                 const res = await fetch(`${API}/chat/stream`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-API-Key': 'lingxi-api-key-change-me'
+                    },
                     body: JSON.stringify({ session_id: session, message: text })
                 });
 
@@ -641,48 +600,37 @@
                     buffer = lines.pop() || '';
 
                     for (const line of lines) {
-                        if (line.startsWith('event: ')) {
-                            const eventType = line.slice(7).trim();
-                            continue;
-                        }
                         if (line.startsWith('data: ')) {
                             const dataStr = line.slice(6).trim();
                             if (!dataStr) continue;
 
                             try {
                                 const data = JSON.parse(dataStr);
-
                                 if (!streamStarted) {
                                     hideTyping();
                                     createStreamingMsg();
                                     streamStarted = true;
                                 }
 
-                                // Handle different event types based on data content
                                 if (data.content !== undefined) {
-                                    // Token event
                                     appendToStream(data.content);
                                 } else if (data.name !== undefined) {
-                                    // Tool event
                                     toolCalls.push(data.name);
                                 } else if (data.status !== undefined) {
-                                    // Done event
                                     finalizeStream(data.tool_calls || toolCalls);
                                 }
-                            } catch (e) {
-                                console.error('Parse error:', e, dataStr);
+                            } catch (error) {
+                                console.error('Parse error:', error, dataStr);
                             }
                         }
                     }
                 }
 
-                // Final cleanup if stream ended without done event
                 if (streamStarted) {
                     finalizeStream(toolCalls);
                 }
-
-            } catch (e) {
-                console.error('Stream error:', e);
+            } catch (error) {
+                console.error('Stream error:', error);
                 hideTyping();
                 if (!currentBotMsg) {
                     addMsg('bot', '抱歉，连接出现问题，请稍后再试。');
@@ -700,23 +648,5 @@
 
         input.focus();
     </script>
-
-    <style>
-        .cursor {
-            animation: blink 1s infinite;
-            color: #0ea5e9;
-        }
-        @keyframes blink {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0; }
-        }
-        code {
-            background: #e0f2fe;
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 13px;
-            color: #0369a1;
-        }
-    </style>
 </body>
 </html>

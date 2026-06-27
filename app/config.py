@@ -38,7 +38,18 @@ class Settings(BaseSettings):
 
     # Knowledge Base
     CHROMA_PERSIST_DIR: str = "./data/chroma"
-    EMBEDDING_MODEL: str = "text-embedding-ada-002"
+    VECTOR_BACKEND: str = "qdrant"
+    VECTOR_PERSIST_DIRECTORY: str = "./data/rag_vectors"
+    QDRANT_URL: str = "http://localhost:6333"
+    QDRANT_API_KEY: SecretStr = SecretStr("not-set")
+    QDRANT_COLLECTION: str = "faq_knowledge"
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSION: int = 1536
+    EMBEDDING_BASE_URL: str = "https://api.openai.com/v1"
+    EMBEDDING_API_KEY: SecretStr = SecretStr("not-set")
+    EMBEDDING_LOCAL_MODEL: str = "all-MiniLM-L6-v2"
+    EMBEDDING_CACHE_ENABLED: bool = True
+    EMBEDDING_CACHE_TTL_SECONDS: int = 2592000
     KNOWLEDGE_TOP_K: int = 3
 
     # Database (MySQL)

@@ -248,8 +248,18 @@ class AnalyticsRepository:
     @staticmethod
     async def get_stats(days: int = 7) -> dict:
         """Get analytics statistics for the last N days."""
+        empty_stats = {
+            "period_days": days,
+            "total_conversations": 0,
+            "resolved_conversations": 0,
+            "resolution_rate": 0.0,
+            "total_messages": 0,
+            "avg_satisfaction": None,
+            "tool_usage": {},
+        }
+
         if not async_session_factory:
-            return {}
+            return empty_stats
 
         try:
             from datetime import timedelta
@@ -309,4 +319,4 @@ class AnalyticsRepository:
                 }
         except Exception as e:
             logger.error(f"Failed to get stats: {e}")
-            return {}
+            return empty_stats

@@ -13,7 +13,7 @@ from app.utils.logger import logger
 class APIKeyMiddleware(BaseHTTPMiddleware):
     """API Key authentication middleware."""
 
-    EXEMPT_PATHS = {"/", "/health", "/docs", "/redoc", "/openapi.json"}
+    EXEMPT_PATHS = {"/", "/admin", "/favicon.ico", "/health", "/docs", "/redoc", "/openapi.json"}
 
     async def dispatch(self, request: Request, call_next):
         if request.url.path in self.EXEMPT_PATHS:
