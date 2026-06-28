@@ -1,4 +1,5 @@
 import json
+from contextlib import suppress
 from collections.abc import AsyncGenerator
 
 from app.agent.llm import LLMClient
@@ -11,6 +12,7 @@ from app.session.manager import SessionManager
 from app.tools.base import execute_tool, get_all_tools
 from app.monitoring import track_tool_call, track_session_message
 from app.cache import get_response_cache
+from app.utils.logger import logger
 
 
 class ReActAgent:
@@ -30,14 +32,17 @@ class ReActAgent:
         self._active_conversations: dict[str, bool] = {}  # Track if conversation is persisted
         self._response_cache = get_response_cache()
 
-    async def _ensure_conversation(self, session_id: str, user_id: str | None = None) -> None:
+    async def _ensure_conversation(self, session_id: str, user_id: str | None = None) -> bool:
         """Ensure conversation record exists in database."""
         if session_id not in self._active_conversations:
-            await ConversationRepository.create_conversation(
+            conversation = await ConversationRepository.create_conversation(
                 conversation_id=session_id,
                 user_id=user_id,
             )
+            if not conversation:
+                return False
             self._active_conversations[session_id] = True
+        return True
 
     async def _persist_message(
         self,
@@ -45,13 +50,78 @@ class ReActAgent:
         role: str,
         content: str,
         tool_calls: list[str] | None = None,
-    ) -> None:
+    ) -> bool:
         """Persist message to database."""
-        await ConversationRepository.save_message(
+        message = await ConversationRepository.save_message(
             conversation_id=session_id,
             role=role,
             content=content,
             tool_calls=tool_calls,
+        )
+        return message is not None
+
+    async def _flush_pending_messages(self, session_id: str, user_id: str | None = None) -> int:
+        """Persist queued database messages for this session."""
+        if not await self._ensure_conversation(session_id, user_id):
+            return 0
+
+        pending_messages = await self.session_mgr.get_pending_db_messages(session_id)
+        persisted_count = 0
+        for payload in pending_messages:
+            saved = await self._persist_message(
+                session_id=session_id,
+                role=payload["role"],
+                content=payload["content"],
+                tool_calls=payload.get("tool_calls"),
+            )
+            if not saved:
+                break
+            persisted_count += 1
+
+        if persisted_count:
+            await self.session_mgr.ack_pending_db_messages(session_id, persisted_count)
+
+        return persisted_count
+
+    async def _persist_or_queue_message(
+        self,
+        session_id: str,
+        role: str,
+        content: str,
+        tool_calls: list[str] | None = None,
+        user_id: str | None = None,
+    ) -> None:
+        """Persist a message to DB, or queue it in Redis if DB is unavailable."""
+        if await self._ensure_conversation(session_id, user_id):
+            if await self._persist_message(session_id, role, content, tool_calls):
+                return
+
+        await self.session_mgr.append_pending_db_message(
+            session_id,
+            {
+                "role": role,
+                "content": content,
+                "tool_calls": tool_calls,
+            },
+        )
+
+    async def _record_message(
+        self,
+        session_id: str,
+        role: MessageRole,
+        content: str,
+        tool_calls: list[str] | None = None,
+        user_id: str | None = None,
+    ) -> None:
+        """Record a message in Redis immediately and persist it for audit."""
+        message = Message(role=role, content=content)
+        await self.session_mgr.append_message(session_id, message)
+        await self._persist_or_queue_message(
+            session_id=session_id,
+            role=role.value,
+            content=content,
+            tool_calls=tool_calls,
+            user_id=user_id,
         )
 
     async def run(self, session_id: str, user_message: str) -> ChatResponse:
@@ -59,14 +129,13 @@ class ReActAgent:
 
         # 0. Ensure conversation exists in database
         await self._ensure_conversation(session_id)
+        await self._flush_pending_messages(session_id)
 
         # 1. Load history and slots
         history = await self.session_mgr.get_history(session_id)
 
         # 2. Save user message to history (Redis + DB)
-        user_msg = Message(role=MessageRole.USER, content=user_message)
-        await self.session_mgr.append_message(session_id, user_msg)
-        await self._persist_message(session_id, "user", user_message)
+        await self._record_message(session_id, MessageRole.USER, user_message)
 
         # Track analytics
         await AnalyticsRepository.track_event(
@@ -83,9 +152,7 @@ class ReActAgent:
         # 3.5 Check response cache (only for simple queries without tool calls)
         cached_response = self._response_cache.get(messages)
         if cached_response and not history:  # Only cache first message in conversation
-            assistant_msg = Message(role=MessageRole.ASSISTANT, content=cached_response)
-            await self.session_mgr.append_message(session_id, assistant_msg)
-            await self._persist_message(session_id, "assistant", cached_response)
+            await self._record_message(session_id, MessageRole.ASSISTANT, cached_response)
             track_session_message(role="assistant")
             return ChatResponse(
                 session_id=session_id,
@@ -107,12 +174,8 @@ class ReActAgent:
             # 4a. LLM returns final answer (no tool calls)
             if choice.finish_reason == "stop":
                 reply = choice.message.content or ""
-                assistant_msg = Message(role=MessageRole.ASSISTANT, content=reply)
-                await self.session_mgr.append_message(session_id, assistant_msg)
-
-                # Persist to database
-                await self._persist_message(
-                    session_id, "assistant", reply,
+                await self._record_message(
+                    session_id, MessageRole.ASSISTANT, reply,
                     tool_calls=tool_calls_made if tool_calls_made else None,
                 )
 
@@ -163,8 +226,12 @@ class ReActAgent:
 
         # Max iterations exceeded - fallback
         fallback = "抱歉，我暂时无法处理您的问题，正在为您转接人工客服。"
-        assistant_msg = Message(role=MessageRole.ASSISTANT, content=fallback)
-        await self.session_mgr.append_message(session_id, assistant_msg)
+        await self._record_message(
+            session_id,
+            MessageRole.ASSISTANT,
+            fallback,
+            tool_calls=tool_calls_made if tool_calls_made else None,
+        )
         return ChatResponse(
             session_id=session_id,
             reply=fallback,
@@ -185,14 +252,13 @@ class ReActAgent:
 
         # 0. Ensure conversation exists
         await self._ensure_conversation(session_id, user_id)
+        await self._flush_pending_messages(session_id, user_id)
 
         # 1. Load history
         history = await self.session_mgr.get_history(session_id)
 
         # 2. Save user message (Redis + DB)
-        user_msg = Message(role=MessageRole.USER, content=user_message)
-        await self.session_mgr.append_message(session_id, user_msg)
-        await self._persist_message(session_id, "user", user_message)
+        await self._record_message(session_id, MessageRole.USER, user_message, user_id=user_id)
 
         # Track analytics
         await AnalyticsRepository.track_event("user_message", conversation_id=session_id)
@@ -248,13 +314,10 @@ class ReActAgent:
             if finish_reason == "stop":
                 # Final answer - save and finish
                 final_reply = collected_content
-                assistant_msg = Message(role=MessageRole.ASSISTANT, content=final_reply)
-                await self.session_mgr.append_message(session_id, assistant_msg)
-
-                # Persist to database
-                await self._persist_message(
-                    session_id, "assistant", final_reply,
+                await self._record_message(
+                    session_id, MessageRole.ASSISTANT, final_reply,
                     tool_calls=tool_calls_made if tool_calls_made else None,
+                    user_id=user_id,
                 )
 
                 status = self._determine_status(tool_calls_made)
@@ -315,11 +378,38 @@ class ReActAgent:
 
         # Max iterations exceeded
         fallback = "抱歉，我暂时无法处理您的问题，正在为您转接人工客服。"
-        assistant_msg = Message(role=MessageRole.ASSISTANT, content=fallback)
-        await self.session_mgr.append_message(session_id, assistant_msg)
-        await self._persist_message(session_id, "assistant", fallback)
+        await self._record_message(
+            session_id,
+            MessageRole.ASSISTANT,
+            fallback,
+            tool_calls=tool_calls_made if tool_calls_made else None,
+            user_id=user_id,
+        )
         yield f"event: token\ndata: {json.dumps({'content': fallback})}\n\n"
         yield f"event: done\ndata: {json.dumps({'session_id': session_id, 'status': 'transferred', 'tool_calls': tool_calls_made})}\n\n"
+
+    async def record_stream_interruption(
+        self,
+        session_id: str,
+        partial_reply: str,
+        tool_calls_made: list[str] | None = None,
+    ) -> None:
+        """Persist partial assistant output when an SSE client disconnects early."""
+        if not partial_reply:
+            return
+
+        await self._record_message(
+            session_id=session_id,
+            role=MessageRole.ASSISTANT,
+            content=partial_reply,
+            tool_calls=tool_calls_made,
+        )
+        await AnalyticsRepository.track_event(
+            "stream_interrupted",
+            conversation_id=session_id,
+            metadata={"partial_reply_length": len(partial_reply)},
+        )
+        logger.info(f"Persisted interrupted stream partial reply for session {session_id}")
 
     def _determine_status(self, tool_calls_made: list[str]) -> str:
         """Determine session status based on tool calls."""

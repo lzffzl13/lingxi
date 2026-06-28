@@ -26,6 +26,13 @@ class ConversationRepository:
 
         try:
             async with async_session_factory() as session:
+                result = await session.execute(
+                    select(Conversation).where(Conversation.id == conversation_id)
+                )
+                existing = result.scalar_one_or_none()
+                if existing:
+                    return existing
+
                 conversation = Conversation(
                     id=conversation_id,
                     user_id=user_id,

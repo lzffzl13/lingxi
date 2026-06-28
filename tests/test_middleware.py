@@ -1,6 +1,7 @@
 """Middleware tests."""
 
 import time
+from types import SimpleNamespace
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -114,3 +115,36 @@ class TestKnowledgeCache:
         # At minimum, they should both return results
         assert len(results1) > 0
         assert len(results2) > 0
+
+    @pytest.mark.asyncio
+    async def test_search_uses_database_entries_when_available(self):
+        """Keyword search should prefer database FAQs when the database is configured."""
+        from app.config import Settings
+        from app.knowledge.manager import KnowledgeManager
+
+        class FakeSession:
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, exc_type, exc, tb):
+                return False
+
+        faq = SimpleNamespace(
+            to_dict=lambda: {
+                "question": "Database FAQ",
+                "answer": "Database answer",
+                "category": "db",
+                "keywords": ["database"],
+            }
+        )
+        repo = MagicMock()
+        repo.get_all = AsyncMock(return_value=[faq])
+
+        km = KnowledgeManager(Settings())
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setattr("app.knowledge.manager.database.async_session_factory", lambda: FakeSession())
+            monkeypatch.setattr("app.knowledge.manager.FAQRepository", lambda _session: repo)
+
+            results = await km.search("database", top_k=1)
+
+        assert results[0]["question"] == "Database FAQ"

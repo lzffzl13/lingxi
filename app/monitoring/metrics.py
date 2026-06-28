@@ -119,12 +119,13 @@ CACHE_SIZE = Gauge(
 RAG_SEARCH_COUNT = Counter(
     'lingxi_rag_searches_total',
     'Total RAG searches',
-    ['status']
+    ['status', 'source']
 )
 
 RAG_SEARCH_LATENCY = Histogram(
     'lingxi_rag_search_duration_seconds',
     'RAG search latency in seconds',
+    ['source'],
     buckets=[0.1, 0.5, 1.0, 2.0, 5.0]
 )
 
@@ -246,10 +247,10 @@ def update_cache_size(cache_type: str, size: int):
     CACHE_SIZE.labels(cache_type=cache_type).set(size)
 
 
-def track_rag_search(duration: float, status: str = 'success'):
+def track_rag_search(duration: float, status: str = 'success', source: str = 'rag'):
     """Track RAG search."""
-    RAG_SEARCH_COUNT.labels(status=status).inc()
-    RAG_SEARCH_LATENCY.observe(duration)
+    RAG_SEARCH_COUNT.labels(status=status, source=source).inc()
+    RAG_SEARCH_LATENCY.labels(source=source).observe(duration)
 
 
 def update_rag_documents(count: int):

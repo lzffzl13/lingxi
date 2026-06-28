@@ -134,6 +134,7 @@ async def test_search_returns_rag_results_when_available():
             "category": "orders",
             "score": pytest.approx(0.63),
             "source": "rag",
+            "match_reason": "semantic_similarity:0.900",
         }
     ]
     manager._rag_pipeline.search.assert_awaited_once_with("question", top_k=2)
@@ -197,6 +198,7 @@ async def test_search_merges_keyword_and_rag_results():
             "category": "orders",
             "score": pytest.approx(0.78),
             "source": "hybrid",
+            "match_reason": "semantic_similarity+keyword_match",
         }
     ]
 
@@ -233,6 +235,56 @@ async def test_load_faq_data_skips_reload_when_vector_store_has_existing_data():
     await manager._load_faq_data()
 
     manager._rag_pipeline.add_faq_data.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_load_faq_source_prefers_database_when_available():
+    manager = RAGKnowledgeManager(make_config())
+
+    class FakeSession:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    repo = AsyncMock()
+    repo.get_all.return_value = [
+        SimpleNamespace(id=12, question="DB question", answer="DB answer", category="db")
+    ]
+
+    with (
+        patch("app.knowledge.rag_manager.database.async_session_factory", lambda: FakeSession()),
+        patch("app.knowledge.rag_manager.FAQRepository", return_value=repo),
+    ):
+        faqs = await manager._load_faq_source()
+
+    assert faqs == [
+        {
+            "id": "12",
+            "question": "DB question",
+            "answer": "DB answer",
+            "category": "db",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_refresh_index_clears_cache_and_reloads_faq_data():
+    manager = RAGKnowledgeManager(make_config())
+    manager._initialized = True
+    manager._rag_pipeline = AsyncMock()
+    manager._rag_pipeline.vector_store = MagicMock()
+    manager._rag_pipeline.vector_store.size = 1
+    manager._keyword_manager = MagicMock()
+
+    with patch.object(manager, "_load_faq_data", new=AsyncMock()) as load_faq_data:
+        count = await manager.refresh_index()
+
+    manager._rag_pipeline.vector_store.clear.assert_called_once()
+    manager._keyword_manager.clear_cache.assert_called_once()
+    load_faq_data.assert_awaited_once_with(skip_existing=False)
+    assert count == 1
 
 
 @pytest.mark.asyncio

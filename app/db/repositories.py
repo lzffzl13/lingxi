@@ -1,8 +1,10 @@
 """Data access layer (repositories) for database operations."""
 
 from typing import Optional
-from sqlalchemy import select, update, delete
+
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.db.models import Order, ReturnOrder, FAQ
 
 
@@ -93,11 +95,15 @@ class FAQRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_all(self, active_only: bool = True) -> list[FAQ]:
+    async def get_all(self, active_only: bool = True, limit: int | None = None, offset: int = 0) -> list[FAQ]:
         """Get all FAQs."""
-        query = select(FAQ)
+        query = select(FAQ).order_by(FAQ.id)
         if active_only:
-            query = query.where(FAQ.is_active == True)
+            query = query.where(FAQ.is_active.is_(True))
+        if offset:
+            query = query.offset(offset)
+        if limit is not None:
+            query = query.limit(limit)
         result = await self.session.execute(query)
         return list(result.scalars().all())
 
@@ -111,7 +117,7 @@ class FAQRepository:
     async def get_by_category(self, category: str) -> list[FAQ]:
         """Get FAQs by category."""
         result = await self.session.execute(
-            select(FAQ).where(FAQ.category == category, FAQ.is_active == True)
+            select(FAQ).where(FAQ.category == category, FAQ.is_active.is_(True))
         )
         return list(result.scalars().all())
 
@@ -136,11 +142,16 @@ class FAQRepository:
         return result.rowcount > 0
 
     async def search(self, query: str) -> list[FAQ]:
-        """Search FAQs by question content."""
+        """Search FAQs by question, answer, or category content."""
+        keyword = f"%{query}%"
         result = await self.session.execute(
             select(FAQ).where(
-                FAQ.question.contains(query),
-                FAQ.is_active == True
-            )
+                FAQ.is_active.is_(True),
+                or_(
+                    FAQ.question.like(keyword),
+                    FAQ.answer.like(keyword),
+                    FAQ.category.like(keyword),
+                ),
+            ).order_by(FAQ.id)
         )
         return list(result.scalars().all())

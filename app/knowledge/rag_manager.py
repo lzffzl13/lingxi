@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+import time
 from collections.abc import Iterable
 from typing import Optional
 
 from app.cache import EmbeddingCache
 from app.config import Settings
+from app.db import database
+from app.db.repositories import FAQRepository
 from app.knowledge.manager import KnowledgeManager
+from app.monitoring import track_rag_search, update_rag_documents
 from app.rag import RAGPipeline
 from app.rag.embeddings import CachedEmbeddingProvider, LocalEmbedding, OpenAIEmbedding
 from app.rag.vector_store import InMemoryVectorStore
@@ -23,6 +28,7 @@ class RAGKnowledgeManager:
         self._rag_pipeline: Optional[RAGPipeline] = None
         self._initialized = False
         self._keyword_manager = KnowledgeManager(config)
+        self._refresh_lock = asyncio.Lock()
 
     async def initialize(self) -> None:
         if self._initialized:
@@ -122,14 +128,39 @@ class RAGKnowledgeManager:
 
         raise ValueError(f"Unsupported vector backend: {self.config.VECTOR_BACKEND}")
 
-    async def _load_faq_data(self) -> None:
+    async def _load_faq_data(self, skip_existing: bool = True) -> None:
         if not self._rag_pipeline:
             return
 
         vector_store_size = getattr(self._rag_pipeline.vector_store, "size", 0)
-        if isinstance(vector_store_size, int) and vector_store_size > 0:
+        if skip_existing and isinstance(vector_store_size, int) and vector_store_size > 0:
             logger.info("Vector store already contains data, skipping FAQ reload")
             return
+
+        faq_list = await self._load_faq_source()
+        chunks_added = await self._rag_pipeline.add_faq_data(faq_list)
+        update_rag_documents(self._rag_pipeline.vector_store.size)
+        logger.info(f"Loaded {chunks_added} FAQ chunks into RAG pipeline")
+
+    async def _load_faq_source(self) -> list[dict]:
+        """Load FAQ source records from database first, then bundled defaults."""
+        if database.async_session_factory:
+            try:
+                async with database.async_session_factory() as session:
+                    repo = FAQRepository(session)
+                    db_faqs = await repo.get_all(active_only=True)
+                    if db_faqs:
+                        return [
+                            {
+                                "id": str(faq.id),
+                                "question": faq.question,
+                                "answer": faq.answer,
+                                "category": faq.category or "general",
+                            }
+                            for faq in db_faqs
+                        ]
+            except Exception as exc:
+                logger.warning(f"Failed to load FAQ data from database, using bundled defaults: {exc}")
 
         from app.knowledge.manager import FAQ_DATABASE
 
@@ -143,25 +174,31 @@ class RAGKnowledgeManager:
                     "category": faq.get("category", "general"),
                 }
             )
-
-        chunks_added = await self._rag_pipeline.add_faq_data(faq_list)
-        logger.info(f"Loaded {chunks_added} FAQ chunks into RAG pipeline")
+        return faq_list
 
     async def search(self, query: str, top_k: int = 3) -> list[dict]:
+        start_time = time.monotonic()
         rag_results: list[dict] = []
+        rag_failed = False
 
         if self._initialized and self._rag_pipeline:
             try:
                 results = await self._rag_pipeline.search(query, top_k=top_k)
                 rag_results = self._format_rag_results(results)
             except Exception as exc:
+                rag_failed = True
                 logger.warning(f"RAG search failed, falling back to keyword: {exc}")
 
         keyword_results = await self._keyword_manager.search(query, top_k=top_k)
         for result in keyword_results:
             result["source"] = "keyword"
+            result["match_reason"] = "keyword_match"
 
-        return self._merge_results(rag_results, keyword_results, top_k)
+        results = self._merge_results(rag_results, keyword_results, top_k)
+        source = self._derive_result_source(results)
+        status = "fallback" if rag_failed else "success"
+        track_rag_search(time.monotonic() - start_time, status=status, source=source)
+        return results
 
     async def add_document(self, content: str, metadata: Optional[dict] = None) -> int:
         if not self._initialized or not self._rag_pipeline:
@@ -185,8 +222,24 @@ class RAGKnowledgeManager:
     def clear_cache(self) -> None:
         if self._rag_pipeline:
             self._rag_pipeline.vector_store.clear()
+            update_rag_documents(self._rag_pipeline.vector_store.size)
         self._keyword_manager.clear_cache()
         logger.info("RAG vector store cleared")
+
+    async def refresh_index(self) -> int:
+        """Rebuild the vector index from the current FAQ source."""
+        if not self._initialized or not self._rag_pipeline:
+            logger.warning("RAG pipeline not initialized, cannot refresh index")
+            return 0
+
+        async with self._refresh_lock:
+            self._rag_pipeline.vector_store.clear()
+            self._keyword_manager.clear_cache()
+            await self._load_faq_data(skip_existing=False)
+            count = self._rag_pipeline.vector_store.size
+            update_rag_documents(count)
+            logger.info(f"RAG vector index refreshed with {count} chunks")
+            return count
 
     def _format_rag_results(self, results: Iterable) -> list[dict]:
         formatted_results = []
@@ -201,6 +254,7 @@ class RAGKnowledgeManager:
                     "category": result.chunk.metadata.get("category", "general"),
                     "score": result.score,
                     "source": "rag",
+                    "match_reason": f"semantic_similarity:{result.score:.3f}",
                 }
             )
 
@@ -220,8 +274,17 @@ class RAGKnowledgeManager:
                 merged_result = merged[key]
                 merged_result["score"] += weighted_score
                 merged_result["source"] = "hybrid"
+                merged_result["match_reason"] = "semantic_similarity+keyword_match"
                 continue
 
             merged[key] = {**result, "score": weighted_score}
 
         return sorted(merged.values(), key=lambda item: item["score"], reverse=True)[:top_k]
+
+    def _derive_result_source(self, results: list[dict]) -> str:
+        if not results:
+            return "none"
+        sources = {result.get("source", "unknown") for result in results}
+        if "hybrid" in sources or len(sources) > 1:
+            return "hybrid"
+        return next(iter(sources))

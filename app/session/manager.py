@@ -22,6 +22,9 @@ class SessionManager:
     def _key_slots(self, session_id: str) -> str:
         return f"session:{session_id}:slots"
 
+    def _key_pending_db_messages(self, session_id: str) -> str:
+        return f"session:{session_id}:pending_db_messages"
+
     async def get_history(self, session_id: str) -> list[Message]:
         """Get message history for a session."""
         key = self._key_history(session_id)
@@ -64,14 +67,48 @@ class SessionManager:
         await self._refresh_ttl(session_id)
         return await self.get_slots(session_id)
 
+    async def append_pending_db_message(self, session_id: str, payload: dict) -> None:
+        """Queue a message for later database persistence."""
+        key = self._key_pending_db_messages(session_id)
+        await self.redis.rpush(key, json.dumps(payload))
+        await self._refresh_ttl(session_id)
+
+    async def get_pending_db_messages(self, session_id: str) -> list[dict]:
+        """Get messages waiting to be persisted to the database."""
+        key = self._key_pending_db_messages(session_id)
+        items = await self.redis.lrange(key, 0, -1)
+        messages = []
+        for item in items:
+            try:
+                messages.append(json.loads(item))
+            except (json.JSONDecodeError, TypeError):
+                continue
+        return messages
+
+    async def ack_pending_db_messages(self, session_id: str, count: int) -> None:
+        """Remove successfully persisted pending database messages."""
+        if count <= 0:
+            return
+
+        key = self._key_pending_db_messages(session_id)
+        items = await self.redis.lrange(key, 0, -1)
+        if count >= len(items):
+            await self.redis.delete(key)
+            return
+
+        await self.redis.ltrim(key, count, -1)
+        await self._refresh_ttl(session_id)
+
     async def clear_session(self, session_id: str) -> None:
         """Delete all session data."""
         await self.redis.delete(
             self._key_history(session_id),
             self._key_slots(session_id),
+            self._key_pending_db_messages(session_id),
         )
 
     async def _refresh_ttl(self, session_id: str) -> None:
         """Refresh TTL for all session keys."""
         await self.redis.expire(self._key_history(session_id), self.ttl)
         await self.redis.expire(self._key_slots(session_id), self.ttl)
+        await self.redis.expire(self._key_pending_db_messages(session_id), self.ttl)

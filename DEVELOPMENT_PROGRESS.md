@@ -191,7 +191,7 @@ LLM_BASE_URL=http://model.mify.ai.srv/v1
 LLM_MODEL=anthropic/claude-sonnet-4-20250514
 
 # 数据库 (可选，不配置则使用 Mock 数据)
-# DATABASE_URL=mysql+pymysql://user:password@localhost:3306/lingxi
+# DATABASE_URL=mysql+aiomysql://user:password@localhost:3306/lingxi
 
 # 安全 (生产环境)
 API_KEY=your-secure-api-key
@@ -239,7 +239,7 @@ python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```bash
 export APP_ENV=production
 export API_KEY=your-secure-key
-export DATABASE_URL=mysql+pymysql://user:pass@host:3306/lingxi
+export DATABASE_URL=mysql+aiomysql://user:pass@host:3306/lingxi
 
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```

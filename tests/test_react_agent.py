@@ -15,6 +15,7 @@ def make_agent(history=None):
     llm.chat_stream = MagicMock()
     session_mgr = AsyncMock()
     session_mgr.get_history.return_value = history or []
+    session_mgr.get_pending_db_messages.return_value = []
     config = Settings()
     agent = ReActAgent(llm, session_mgr, config)
     agent._response_cache = MagicMock()
@@ -178,6 +179,7 @@ async def test_run_max_iterations_returns_transfer_fallback(patched_react_depend
     assert response.status == "transferred"
     assert response.tool_calls_made == ["check_order", "check_order"]
     assert session_mgr.append_message.await_count == 2
+    assert patched_react_dependencies["save_message"].await_count == 2
 
 
 @pytest.mark.asyncio
@@ -200,6 +202,7 @@ async def test_run_stream_yields_tokens_and_done(patched_react_dependencies):
         conversation_id="s1",
         user_id="u1",
     )
+    assert patched_react_dependencies["save_message"].await_count == 2
 
 
 @pytest.mark.asyncio
@@ -223,3 +226,43 @@ async def test_run_stream_executes_tool_then_finishes(patched_react_dependencies
     assert events[-1].startswith("event: done")
     execute_tool.assert_awaited_once_with("check_order", {"order_id": "ORD-1"})
     session_mgr.update_slot.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_record_stream_interruption_persists_partial_reply(patched_react_dependencies):
+    agent, _, session_mgr = make_agent()
+
+    await agent.record_stream_interruption("s1", "partial", ["check_order"])
+
+    assert session_mgr.append_message.await_count == 1
+    patched_react_dependencies["save_message"].assert_awaited_once_with(
+        conversation_id="s1",
+        role="assistant",
+        content="partial",
+        tool_calls=["check_order"],
+    )
+    patched_react_dependencies["track_event"].assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_failed_database_persistence_is_queued_in_redis(patched_react_dependencies):
+    agent, llm, session_mgr = make_agent()
+    patched_react_dependencies["create_conversation"].return_value = None
+    llm.chat.return_value = stop_response("hello")
+
+    await agent.run("s1", "hi")
+
+    assert session_mgr.append_pending_db_message.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_pending_messages_are_flushed_before_new_turn(patched_react_dependencies):
+    agent, llm, session_mgr = make_agent()
+    session_mgr.get_pending_db_messages.return_value = [
+        {"role": "user", "content": "old", "tool_calls": None}
+    ]
+    llm.chat.return_value = stop_response("hello")
+
+    await agent.run("s1", "hi")
+
+    session_mgr.ack_pending_db_messages.assert_awaited_once_with("s1", 1)

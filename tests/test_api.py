@@ -145,7 +145,7 @@ async def test_health_degraded_when_database_is_configured_but_unavailable(api_a
     from app.api import health as health_module
 
     override_health_deps(api_app, redis_ok=True, llm_ok=True)
-    health_module.settings.DATABASE_URL = "mysql+pymysql://user:pass@localhost/db"
+    health_module.settings.DATABASE_URL = "mysql+aiomysql://user:pass@localhost/db"
     health_module.async_session_factory = make_session_factory(should_fail=True)
 
     resp = await client.get("/health")
@@ -162,7 +162,7 @@ async def test_health_ok_when_database_is_connected(api_app, client):
     from app.api import health as health_module
 
     override_health_deps(api_app, redis_ok=True, llm_ok=True)
-    health_module.settings.DATABASE_URL = "mysql+pymysql://user:pass@localhost/db"
+    health_module.settings.DATABASE_URL = "mysql+aiomysql://user:pass@localhost/db"
     health_module.async_session_factory = make_session_factory(should_fail=False)
 
     resp = await client.get("/health")
@@ -277,6 +277,38 @@ async def test_chat_stream(api_app, client, auth_headers):
     assert resp.headers["content-type"].startswith("text/event-stream")
     assert "event: token" in resp.text
     assert "event: done" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_persists_partial_reply_on_disconnect():
+    """Streaming endpoint persists partial assistant output when the client disconnects early."""
+    from app.api.chat import chat_stream
+    from app.models.schemas import ChatRequest
+
+    async def event_source(session_id, user_message):
+        assert session_id == "test-001"
+        assert user_message == "hello"
+        yield 'event: token\ndata: {"content": "partial"}\n\n'
+        yield 'event: token\ndata: {"content": " ignored"}\n\n'
+
+    mock_agent = MagicMock()
+    mock_agent.run_stream.side_effect = event_source
+    mock_agent.record_stream_interruption = AsyncMock()
+
+    response = await chat_stream(
+        ChatRequest(session_id="test-001", message="hello"),
+        mock_agent,
+    )
+
+    first_event = await anext(response.body_iterator)
+    assert "partial" in first_event
+    await response.body_iterator.aclose()
+
+    mock_agent.record_stream_interruption.assert_awaited_once_with(
+        session_id="test-001",
+        partial_reply="partial",
+        tool_calls_made=None,
+    )
 
 
 @pytest.mark.asyncio

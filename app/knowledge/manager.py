@@ -4,6 +4,8 @@ import time
 from functools import lru_cache
 
 from app.config import Settings
+from app.db import database
+from app.db.repositories import FAQRepository
 from app.utils.logger import logger
 
 
@@ -125,21 +127,29 @@ class KnowledgeManager:
             logger.debug(f"Cache hit for query: {query}")
             return cached
 
+        faq_entries = await self._load_faq_entries()
+
         # Perform search
         query_lower = query.lower()
         results = []
-        for faq in FAQ_DATABASE:
+        for faq in faq_entries:
             score = 0
-            for keyword in faq["keywords"]:
+            keywords = faq.get("keywords") or []
+            for keyword in keywords:
                 if keyword in query_lower:
                     score += 1
+
+            if query_lower in faq["question"].lower():
+                score += 1
+            if query_lower in faq["answer"].lower():
+                score += 0.5
 
             if score > 0:
                 results.append({
                     "question": faq["question"],
                     "answer": faq["answer"],
                     "category": faq["category"],
-                    "score": score / len(faq["keywords"])
+                    "score": score / max(len(keywords), 1),
                 })
 
         # Sort by score and return top k
@@ -155,3 +165,17 @@ class KnowledgeManager:
         """Clear the search cache."""
         self._cache.clear()
         logger.info("Knowledge search cache cleared")
+
+    async def _load_faq_entries(self) -> list[dict]:
+        """Load FAQ entries from database when available, otherwise use bundled defaults."""
+        if database.async_session_factory:
+            try:
+                async with database.async_session_factory() as session:
+                    repo = FAQRepository(session)
+                    faqs = await repo.get_all(active_only=True)
+                    if faqs:
+                        return [faq.to_dict() for faq in faqs]
+            except Exception as exc:
+                logger.warning(f"Failed to load FAQ entries from database, using defaults: {exc}")
+
+        return FAQ_DATABASE

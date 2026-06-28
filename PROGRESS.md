@@ -134,7 +134,7 @@ LLM_MODEL=gpt-4
 REDIS_URL=redis://localhost:6379/0
 
 # Database (MySQL)
-DATABASE_URL=mysql+pymysql://user:password@localhost:3306/lingxi
+DATABASE_URL=mysql+aiomysql://user:password@localhost:3306/lingxi
 
 # Security
 API_KEY=your-api-key-for-auth
@@ -177,7 +177,7 @@ python -m uvicorn app.main:app --reload
 # 设置环境变量
 export APP_ENV=production
 export API_KEY=your-secure-api-key
-export DATABASE_URL=mysql+pymysql://user:pass@mysql:3306/lingxi
+export DATABASE_URL=mysql+aiomysql://user:pass@mysql:3306/lingxi
 
 # 启动服务
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4

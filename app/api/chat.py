@@ -1,3 +1,6 @@
+import json
+from contextlib import suppress
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -48,11 +51,43 @@ async def chat_stream(request: ChatRequest, agent: AgentDep):
 
     try:
         async def event_generator():
-            async for event in agent.run_stream(
-                session_id=request.session_id,
-                user_message=message,
-            ):
-                yield event
+            partial_reply = ""
+            tool_calls_made: list[str] = []
+            stream_completed = False
+
+            try:
+                async for event in agent.run_stream(
+                    session_id=request.session_id,
+                    user_message=message,
+                ):
+                    event_type = None
+                    event_data = None
+                    for line in event.splitlines():
+                        if line.startswith("event: "):
+                            event_type = line.removeprefix("event: ").strip()
+                        elif line.startswith("data: "):
+                            event_data = line.removeprefix("data: ").strip()
+
+                    if event_type == "token" and event_data:
+                        with suppress(json.JSONDecodeError):
+                            partial_reply += json.loads(event_data).get("content", "")
+                    elif event_type == "tool" and event_data:
+                        with suppress(json.JSONDecodeError):
+                            tool_name = json.loads(event_data).get("name")
+                            if tool_name:
+                                tool_calls_made.append(tool_name)
+                    elif event_type == "done":
+                        stream_completed = True
+
+                    yield event
+            finally:
+                if not stream_completed and partial_reply:
+                    with suppress(Exception):
+                        await agent.record_stream_interruption(
+                            session_id=request.session_id,
+                            partial_reply=partial_reply,
+                            tool_calls_made=tool_calls_made or None,
+                        )
 
         return StreamingResponse(
             event_generator(),

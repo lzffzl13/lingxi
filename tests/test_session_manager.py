@@ -124,6 +124,25 @@ async def test_update_slot_round_trips_json_values(session_manager):
 
 
 @pytest.mark.asyncio
+async def test_pending_db_messages_can_be_queued_and_acked(session_manager):
+    manager, redis = session_manager
+
+    await manager.append_pending_db_message("s1", {"role": "user", "content": "one"})
+    await manager.append_pending_db_message("s1", {"role": "assistant", "content": "two"})
+
+    pending = await manager.get_pending_db_messages("s1")
+    assert [message["content"] for message in pending] == ["one", "two"]
+    assert redis.expirations["session:s1:pending_db_messages"] == 30
+
+    await manager.ack_pending_db_messages("s1", 1)
+    pending = await manager.get_pending_db_messages("s1")
+    assert [message["content"] for message in pending] == ["two"]
+
+    await manager.ack_pending_db_messages("s1", 1)
+    assert await manager.get_pending_db_messages("s1") == []
+
+
+@pytest.mark.asyncio
 async def test_get_slots_keeps_plain_values_when_not_json(session_manager):
     manager, redis = session_manager
     redis.hashes["session:s1:slots"] = {"order_id": "ORD-1"}
@@ -139,4 +158,8 @@ async def test_clear_session_deletes_history_and_slots(session_manager):
 
     await manager.clear_session("s1")
 
-    assert redis.deleted == ["session:s1:history", "session:s1:slots"]
+    assert redis.deleted == [
+        "session:s1:history",
+        "session:s1:slots",
+        "session:s1:pending_db_messages",
+    ]

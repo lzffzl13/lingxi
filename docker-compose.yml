@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   redis:
     image: redis:7-alpine
@@ -55,9 +53,12 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://redis:6379/0
-      - DATABASE_URL=mysql+pymysql://lingxi:lingxi_password@mysql:3306/lingxi
+      - DATABASE_URL=mysql+aiomysql://${MYSQL_USER:-lingxi}:${MYSQL_PASSWORD:-lingxi_password}@mysql:3306/${MYSQL_DATABASE:-lingxi}
+      - VECTOR_BACKEND=qdrant
       - QDRANT_URL=http://qdrant:6333
+      - QDRANT_COLLECTION=${QDRANT_COLLECTION:-faq_knowledge}
       - APP_ENV=production
+      - AUTH_ENABLED=true
     depends_on:
       redis:
         condition: service_healthy
@@ -66,7 +67,7 @@ services:
       mysql:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       start_period: 10s
