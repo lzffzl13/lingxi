@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Optional
 
 from app.cache import EmbeddingCache
 from app.config import Settings
+from app.knowledge.manager import KnowledgeManager
 from app.rag import RAGPipeline
 from app.rag.embeddings import CachedEmbeddingProvider, LocalEmbedding, OpenAIEmbedding
 from app.rag.vector_store import InMemoryVectorStore
@@ -20,6 +22,7 @@ class RAGKnowledgeManager:
         self.config = config
         self._rag_pipeline: Optional[RAGPipeline] = None
         self._initialized = False
+        self._keyword_manager = KnowledgeManager(config)
 
     async def initialize(self) -> None:
         if self._initialized:
@@ -123,6 +126,11 @@ class RAGKnowledgeManager:
         if not self._rag_pipeline:
             return
 
+        vector_store_size = getattr(self._rag_pipeline.vector_store, "size", 0)
+        if isinstance(vector_store_size, int) and vector_store_size > 0:
+            logger.info("Vector store already contains data, skipping FAQ reload")
+            return
+
         from app.knowledge.manager import FAQ_DATABASE
 
         faq_list = []
@@ -140,30 +148,20 @@ class RAGKnowledgeManager:
         logger.info(f"Loaded {chunks_added} FAQ chunks into RAG pipeline")
 
     async def search(self, query: str, top_k: int = 3) -> list[dict]:
+        rag_results: list[dict] = []
+
         if self._initialized and self._rag_pipeline:
             try:
                 results = await self._rag_pipeline.search(query, top_k=top_k)
-                if results:
-                    return [
-                        {
-                            "question": result.chunk.metadata.get("question", ""),
-                            "answer": result.chunk.metadata.get("answer", result.chunk.content),
-                            "category": result.chunk.metadata.get("category", "general"),
-                            "score": result.score,
-                            "source": "rag",
-                        }
-                        for result in results
-                    ]
+                rag_results = self._format_rag_results(results)
             except Exception as exc:
                 logger.warning(f"RAG search failed, falling back to keyword: {exc}")
 
-        from app.knowledge.manager import KnowledgeManager
-
-        fallback_manager = KnowledgeManager(self.config)
-        results = await fallback_manager.search(query, top_k=top_k)
-        for result in results:
+        keyword_results = await self._keyword_manager.search(query, top_k=top_k)
+        for result in keyword_results:
             result["source"] = "keyword"
-        return results
+
+        return self._merge_results(rag_results, keyword_results, top_k)
 
     async def add_document(self, content: str, metadata: Optional[dict] = None) -> int:
         if not self._initialized or not self._rag_pipeline:
@@ -187,4 +185,43 @@ class RAGKnowledgeManager:
     def clear_cache(self) -> None:
         if self._rag_pipeline:
             self._rag_pipeline.vector_store.clear()
-            logger.info("RAG vector store cleared")
+        self._keyword_manager.clear_cache()
+        logger.info("RAG vector store cleared")
+
+    def _format_rag_results(self, results: Iterable) -> list[dict]:
+        formatted_results = []
+        for result in results:
+            if result.score < self.config.RAG_SCORE_THRESHOLD:
+                continue
+
+            formatted_results.append(
+                {
+                    "question": result.chunk.metadata.get("question", ""),
+                    "answer": result.chunk.metadata.get("answer", result.chunk.content),
+                    "category": result.chunk.metadata.get("category", "general"),
+                    "score": result.score,
+                    "source": "rag",
+                }
+            )
+
+        return formatted_results
+
+    def _merge_results(self, rag_results: list[dict], keyword_results: list[dict], top_k: int) -> list[dict]:
+        merged: dict[tuple[str, str], dict] = {}
+
+        for result in rag_results:
+            key = (result["question"], result["answer"])
+            merged[key] = {**result, "score": result["score"] * self.config.HYBRID_RAG_WEIGHT}
+
+        for result in keyword_results:
+            key = (result["question"], result["answer"])
+            weighted_score = result["score"] * self.config.HYBRID_KEYWORD_WEIGHT
+            if key in merged:
+                merged_result = merged[key]
+                merged_result["score"] += weighted_score
+                merged_result["source"] = "hybrid"
+                continue
+
+            merged[key] = {**result, "score": weighted_score}
+
+        return sorted(merged.values(), key=lambda item: item["score"], reverse=True)[:top_k]

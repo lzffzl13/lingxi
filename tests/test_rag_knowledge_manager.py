@@ -132,7 +132,7 @@ async def test_search_returns_rag_results_when_available():
             "question": "Question",
             "answer": "Question\nAnswer text",
             "category": "orders",
-            "score": 0.9,
+            "score": pytest.approx(0.63),
             "source": "rag",
         }
     ]
@@ -152,6 +152,87 @@ async def test_search_falls_back_to_keyword_when_rag_empty_or_fails():
     manager._rag_pipeline.search.side_effect = RuntimeError("rag down")
     results = await manager.search("q1", top_k=1)
     assert isinstance(results, list)
+
+
+@pytest.mark.asyncio
+async def test_search_merges_keyword_and_rag_results():
+    manager = RAGKnowledgeManager(make_config())
+    manager._initialized = True
+    manager._rag_pipeline = AsyncMock()
+    manager._rag_pipeline.search.return_value = [
+        SimpleNamespace(
+            chunk=TextChunk(
+                content="订单查询\n请提供订单号",
+                metadata={
+                    "question": "如何查询订单状态？",
+                    "answer": "请提供订单号",
+                    "category": "orders",
+                },
+                index=0,
+            ),
+            score=0.9,
+        )
+    ]
+
+    with patch.object(
+        manager._keyword_manager,
+        "search",
+        new=AsyncMock(
+            return_value=[
+                {
+                    "question": "如何查询订单状态？",
+                    "answer": "请提供订单号",
+                    "category": "orders",
+                    "score": 0.5,
+                }
+            ]
+        ),
+    ):
+        results = await manager.search("订单查询", top_k=2)
+
+    assert results == [
+        {
+            "question": "如何查询订单状态？",
+            "answer": "请提供订单号",
+            "category": "orders",
+            "score": pytest.approx(0.78),
+            "source": "hybrid",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_search_filters_low_score_rag_results():
+    manager = RAGKnowledgeManager(make_config())
+    manager.config.RAG_SCORE_THRESHOLD = 0.95
+    manager._initialized = True
+    manager._rag_pipeline = AsyncMock()
+    manager._rag_pipeline.search.return_value = [
+        SimpleNamespace(
+            chunk=TextChunk(
+                content="Question\nAnswer text",
+                metadata={"question": "Question", "answer": "Answer text", "category": "orders"},
+                index=0,
+            ),
+            score=0.9,
+        )
+    ]
+
+    with patch.object(manager._keyword_manager, "search", new=AsyncMock(return_value=[])):
+        results = await manager.search("question", top_k=2)
+
+    assert results == []
+
+
+@pytest.mark.asyncio
+async def test_load_faq_data_skips_reload_when_vector_store_has_existing_data():
+    manager = RAGKnowledgeManager(make_config())
+    manager._rag_pipeline = MagicMock()
+    manager._rag_pipeline.vector_store.size = 1
+
+    await manager._load_faq_data()
+
+    manager._rag_pipeline.add_faq_data.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -186,7 +267,9 @@ def test_get_stats_and_clear_cache():
     manager._rag_pipeline = MagicMock()
     manager._rag_pipeline.get_stats.return_value = {"total_chunks": 2}
     manager._rag_pipeline.vector_store = vector_store
+    manager._keyword_manager = MagicMock()
 
     assert manager.get_stats() == {"total_chunks": 2, "initialized": True}
     manager.clear_cache()
     vector_store.clear.assert_called_once()
+    manager._keyword_manager.clear_cache.assert_called_once()

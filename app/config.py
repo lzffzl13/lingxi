@@ -51,9 +51,16 @@ class Settings(BaseSettings):
     EMBEDDING_CACHE_ENABLED: bool = True
     EMBEDDING_CACHE_TTL_SECONDS: int = 2592000
     KNOWLEDGE_TOP_K: int = 3
+    RAG_SCORE_THRESHOLD: float = 0.2
+    HYBRID_RAG_WEIGHT: float = 0.7
+    HYBRID_KEYWORD_WEIGHT: float = 0.3
 
     # Database (MySQL)
     DATABASE_URL: str = ""
+    DB_POOL_SIZE: int = 20
+    DB_MAX_OVERFLOW: int = 10
+    DB_POOL_TIMEOUT: int = 30
+    DB_POOL_RECYCLE: int = 1800
 
     # Security
     API_KEY: str = DEFAULT_API_KEY

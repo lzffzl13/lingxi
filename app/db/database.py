@@ -1,7 +1,12 @@
 """Database connection management with SQLAlchemy async."""
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+
 from app.config import settings
 from app.utils.logger import logger
 
@@ -18,6 +23,10 @@ async def init_db() -> None:
     """Initialize database connection and create tables."""
     global engine, async_session_factory
 
+    if engine is not None and async_session_factory is not None:
+        logger.debug("Database already initialized, skipping reinitialization")
+        return
+
     database_url = settings.DATABASE_URL
     if not database_url:
         logger.warning("DATABASE_URL not set, database features disabled")
@@ -31,9 +40,11 @@ async def init_db() -> None:
         engine = create_async_engine(
             database_url,
             echo=settings.APP_ENV == "development",
-            pool_size=20,
-            max_overflow=10,
+            pool_size=settings.DB_POOL_SIZE,
+            max_overflow=settings.DB_MAX_OVERFLOW,
             pool_pre_ping=True,
+            pool_timeout=settings.DB_POOL_TIMEOUT,
+            pool_recycle=settings.DB_POOL_RECYCLE,
         )
 
         async_session_factory = async_sessionmaker(
@@ -55,13 +66,15 @@ async def init_db() -> None:
 
 async def close_db() -> None:
     """Close database connection."""
-    global engine
+    global engine, async_session_factory
     if engine:
         await engine.dispose()
+        engine = None
+        async_session_factory = None
         logger.info("Database connection closed")
 
 
-async def get_db() -> AsyncSession:
+async def get_db() -> AsyncIterator[AsyncSession]:
     """Get database session."""
     if not async_session_factory:
         raise RuntimeError("Database not initialized")
